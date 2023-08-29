@@ -68,11 +68,7 @@ fn contract_legs_(ilegs: Legs, jlegs: Legs, appearances: &Vec<Count>) -> Legs {
 }
 
 fn compute_size(legs: &Legs, sizes: &Vec<Score>) -> Score {
-    let mut d = 1;
-    for (ix, _) in legs {
-        d *= sizes[*ix as usize];
-    }
-    d
+    legs.iter().map(|&(ix, _)| sizes[ix as usize]).product()
 }
 
 impl HypergraphProcessor {
@@ -308,7 +304,8 @@ impl HypergraphProcessor {
             node_sizes.insert(i, compute_size(&legs, &self.sizes));
         });
 
-        let mut queue: BinaryHeap<(GreedyScore, usize)> = BinaryHeap::default();
+        let mut queue: BinaryHeap<(GreedyScore, usize)> =
+            BinaryHeap::with_capacity(self.edges.len() * 2);
         let mut contractions: Dict<usize, (Node, Node, Score, Legs)> = Dict::default();
         let mut checked: FxHashSet<(Node, Node)> = FxHashSet::default();
         let mut c: usize = 0;
@@ -358,8 +355,7 @@ impl HypergraphProcessor {
                 }
                 let llegs = self.nodes[&l].clone();
                 let lsize = node_sizes[&l];
-                let mlegs =
-                    contract_legs_(klegs.clone(), llegs, &self.appearances);
+                let mlegs = contract_legs_(klegs.clone(), llegs, &self.appearances);
                 let msize = compute_size(&mlegs, &self.sizes);
                 let score = (msize as GreedyScore) - ((ksize + lsize) as GreedyScore);
                 queue.push((-score, c));
@@ -392,7 +388,6 @@ fn test_subgraphs(
     let hgp = HypergraphProcessor::new(inputs, output, size_dict);
     hgp.subgraphs()
 }
-
 
 #[pyfunction]
 #[pyo3()]
