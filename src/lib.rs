@@ -1,7 +1,7 @@
 // use bit_set::BitSet;
+use std::collections::{BTreeSet, BinaryHeap};
 use pyo3::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::{BTreeSet, BinaryHeap};
 
 use FxHashMap as Dict;
 
@@ -25,7 +25,7 @@ struct HypergraphProcessor {
     ssa_path: SSAPath,
 }
 
-fn contract_legs_(ilegs: Legs, jlegs: Legs, appearances: &Vec<Count>) -> Legs {
+fn compute_legs(ilegs: &Legs, jlegs: &Legs, appearances: &Vec<Count>) -> Legs {
     let mut ip = 0;
     let mut jp = 0;
     let ni = ilegs.len();
@@ -75,7 +75,7 @@ impl HypergraphProcessor {
     fn new(
         inputs: Vec<Vec<char>>,
         output: Vec<char>,
-        size_dict: Dict<char, Score>,
+        size_dict: Dict<char, u32>,
     ) -> HypergraphProcessor {
         let mut nodes: Dict<Node, Legs> = Dict::default();
         let mut edges: Dict<Ix, Vec<Node>> = Dict::default();
@@ -93,7 +93,7 @@ impl HypergraphProcessor {
                         indmap.insert(ind, c);
                         edges.insert(c, vec![i as Node]);
                         appearances.push(1);
-                        sizes.push(size_dict[&ind]);
+                        sizes.push(size_dict[&ind] as Score);
                         legs.push((c, 1));
                         c += 1;
                     }
@@ -172,7 +172,7 @@ impl HypergraphProcessor {
     fn contract(&mut self, i: Node, j: Node) -> Node {
         let ilegs = self.pop_node(i);
         let jlegs = self.pop_node(j);
-        let new_legs = contract_legs_(ilegs, jlegs, &self.appearances);
+        let new_legs = compute_legs(&ilegs, &jlegs, &self.appearances);
         let k = self.add_node(new_legs);
         self.ssa_path.push(vec![i, j]);
         k
@@ -318,9 +318,9 @@ impl HypergraphProcessor {
                 for jp in (ip + 1)..ix_nodes.len() {
                     let j = ix_nodes[jp];
                     let jsize = node_sizes[&j];
-                    let klegs = contract_legs_(
-                        self.nodes[&i].clone(),
-                        self.nodes[&j].clone(),
+                    let klegs = compute_legs(
+                        &self.nodes[&i],
+                        &self.nodes[&j],
                         &self.appearances,
                     );
                     let ksize = compute_size(&klegs, &self.sizes);
@@ -353,9 +353,9 @@ impl HypergraphProcessor {
                 } else {
                     checked.insert(key);
                 }
-                let llegs = self.nodes[&l].clone();
+                let llegs = &self.nodes[&l];
                 let lsize = node_sizes[&l];
-                let mlegs = contract_legs_(klegs.clone(), llegs, &self.appearances);
+                let mlegs = compute_legs(&klegs, llegs, &self.appearances);
                 let msize = compute_size(&mlegs, &self.sizes);
                 let score = (msize as GreedyScore) - ((ksize + lsize) as GreedyScore);
                 queue.push((-score, c));
@@ -371,7 +371,7 @@ impl HypergraphProcessor {
 fn test_simplify(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
-    size_dict: Dict<char, Score>,
+    size_dict: Dict<char, u32>,
 ) -> SSAPath {
     let mut hgp = HypergraphProcessor::new(inputs, output, size_dict);
     hgp.simplify();
@@ -383,7 +383,7 @@ fn test_simplify(
 fn test_subgraphs(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
-    size_dict: Dict<char, Score>,
+    size_dict: Dict<char, u32>,
 ) -> Vec<Vec<Node>> {
     let hgp = HypergraphProcessor::new(inputs, output, size_dict);
     hgp.subgraphs()
@@ -394,7 +394,7 @@ fn test_subgraphs(
 fn test_greedy(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
-    size_dict: Dict<char, Score>,
+    size_dict: Dict<char, u32>,
 ) -> Vec<Vec<Node>> {
     let mut hgp = HypergraphProcessor::new(inputs, output, size_dict);
     hgp.simplify();
