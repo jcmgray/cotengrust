@@ -16,5 +16,7 @@ rand = "0.8"
 rustc-hash = "1.1"
 
 [profile.release]
-overflow-checks = false
-lto = "fat"
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
