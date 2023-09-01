@@ -674,15 +674,16 @@ impl ContractionProcessor {
                             // contractions[m] for borrowing reasons, we check
                             // against a non-delayed score lookup so we don't
                             // overwrite best scores within the same iteration
-                            let new_best = match best_scores.get(&new_subgraph) {
+                            let found_new_best = match best_scores.get(&new_subgraph) {
                                 Some(current_score) => new_score < *current_score,
                                 None => true,
                             };
-                            if new_best {
+                            if found_new_best {
                                 best_scores.insert(new_subgraph.clone(), new_score);
                                 // only need the path if updating
-                                let mut new_path = ipath.clone();
-                                new_path.extend(jpath.clone());
+                                let mut new_path: BitPath = Vec::with_capacity(ipath.len() + jpath.len() + 1);
+                                new_path.extend_from_slice(&ipath);
+                                new_path.extend_from_slice(&jpath);
                                 new_path.push((isubgraph.clone(), jsubgraph.clone()));
                                 contractions_m_temp
                                     .push((new_subgraph, (new_legs, new_score, new_path)));
