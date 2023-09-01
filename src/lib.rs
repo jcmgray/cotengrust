@@ -13,8 +13,14 @@ type Count = u8;
 type Legs = Vec<(Ix, Count)>;
 type Node = u16;
 type Score = f32;
-type GreedyScore = OrderedFloat<Score>;
 type SSAPath = Vec<Vec<Node>>;
+type GreedyScore = OrderedFloat<Score>;
+
+// types for optimal optimization
+type ONode = u32;
+type Subgraph = BitSet<ONode>;
+type BitPath = Vec<(Subgraph, Subgraph)>;
+type SubContraction = (Legs, Score, BitPath);
 
 /// helper struct to build contractions from bottom up
 struct ContractionProcessor {
@@ -28,13 +34,13 @@ struct ContractionProcessor {
 
 /// given log(x) and log(y) compute log(x + y), without exponentiating both
 fn logadd(lx: Score, ly: Score) -> Score {
-    let (lx, ly) = if lx > ly { (lx, ly) } else { (ly, lx) };
-    lx + f32::ln_1p(f32::exp(ly - lx))
+    let max_val = lx.max(ly);
+    max_val + f32::ln_1p(f32::exp(-f32::abs(lx - ly)))
 }
 
 /// given log(x) and log(y) compute log(x - y), without exponentiating both,
 /// if (x - y) is negative, return -log(x - y).
-fn logsub(lx: Score, ly: Score) -> Score {
+fn logsub(lx: f32, ly: f32) -> f32 {
     if lx < ly {
         -ly - f32::ln_1p(-f32::exp(lx - ly))
     } else {
@@ -436,13 +442,35 @@ impl ContractionProcessor {
             }
         }
     }
-}
 
-type ONode = u32;
-type OScore = u64;
-type Subgraph = BitSet<ONode>;
-type BitPath = Vec<(Subgraph, Subgraph)>;
-type SubContraction = (Legs, OScore, BitPath);
+    /// Optimize the contraction order of all terms using a greedy algorithm
+    /// that contracts the smallest two terms. Typically only called once
+    /// only disconnected subgraph terms (outer products) remain.
+    fn optimize_remaining_by_size(&mut self) {
+        if self.nodes.len() == 1 {
+            // nothing to do
+            return;
+        };
+
+        let mut nodes_sizes: BinaryHeap<(GreedyScore, Node)> = BinaryHeap::default();
+        self.nodes.iter().for_each(|(node, legs)| {
+            nodes_sizes.push((OrderedFloat(-compute_size(&legs, &self.sizes)), *node));
+        });
+
+        let (_, mut i) = nodes_sizes.pop().unwrap();
+        let (_, mut j) = nodes_sizes.pop().unwrap();
+        let mut k = self.contract_nodes(i, j);
+
+        while self.nodes.len() > 1 {
+            // contract the smallest two nodes until only one remains
+            let ksize = compute_size(&self.nodes[&k], &self.sizes);
+            nodes_sizes.push((OrderedFloat(-ksize), k));
+            (_, i) = nodes_sizes.pop().unwrap();
+            (_, j) = nodes_sizes.pop().unwrap();
+            k = self.contract_nodes(i, j);
+        }
+    }
+}
 
 fn single_el_bitset(x: usize, n: usize) -> BitSet<ONode> {
     let mut a: BitSet<ONode> = BitSet::with_capacity(n);
@@ -453,102 +481,102 @@ fn single_el_bitset(x: usize, n: usize) -> BitSet<ONode> {
 fn compute_con_cost_flops(
     temp_legs: Legs,
     appearances: &Vec<Count>,
-    sizes: &Vec<OScore>,
-    iscore: &OScore,
-    jscore: &OScore,
-    _factor: OScore,
-) -> (Legs, OScore) {
+    sizes: &Vec<Score>,
+    iscore: Score,
+    jscore: Score,
+    _factor: Score,
+) -> (Legs, Score) {
     // remove indices that have reached final appearance
     // and compute cost and size of local contraction
     let mut new_legs: Legs = Legs::with_capacity(temp_legs.len());
-    let mut cost: OScore = 1;
+    let mut cost: Score = 0.0;
     for (ix, ix_count) in temp_legs.into_iter() {
         // all involved indices contribute to the cost
         let d = sizes[ix as usize];
-        cost *= d;
+        cost += d;
         if ix_count != appearances[ix as usize] {
             // not last appearance -> kept index contributes to new size
             new_legs.push((ix, ix_count));
         }
     }
-    let new_score = iscore + jscore + cost;
+    let new_score = logadd(logadd(iscore, jscore), cost);
     (new_legs, new_score)
 }
 
 fn compute_con_cost_size(
     temp_legs: Legs,
     appearances: &Vec<Count>,
-    sizes: &Vec<OScore>,
-    iscore: &OScore,
-    jscore: &OScore,
-    _factor: OScore,
-) -> (Legs, OScore) {
+    sizes: &Vec<Score>,
+    iscore: Score,
+    jscore: Score,
+    _factor: Score,
+) -> (Legs, Score) {
     // remove indices that have reached final appearance
     // and compute cost and size of local contraction
     let mut new_legs: Legs = Legs::with_capacity(temp_legs.len());
-    let mut size: OScore = 1;
+    let mut size: Score = 0.0;
     for (ix, ix_count) in temp_legs.into_iter() {
         if ix_count != appearances[ix as usize] {
             // not last appearance -> kept index contributes to new size
             new_legs.push((ix, ix_count));
-            size *= sizes[ix as usize];
+            size += sizes[ix as usize];
         }
     }
-    let new_score = *iscore.max(jscore).max(&size);
+    let new_score = iscore.max(jscore).max(size);
     (new_legs, new_score)
 }
 
 fn compute_con_cost_write(
     temp_legs: Legs,
     appearances: &Vec<Count>,
-    sizes: &Vec<OScore>,
-    iscore: &OScore,
-    jscore: &OScore,
-    _factor: OScore,
-) -> (Legs, OScore) {
+    sizes: &Vec<Score>,
+    iscore: Score,
+    jscore: Score,
+    _factor: Score,
+) -> (Legs, Score) {
     // remove indices that have reached final appearance
     // and compute cost and size of local contraction
     let mut new_legs: Legs = Legs::with_capacity(temp_legs.len());
-    let mut size: OScore = 1;
+    let mut size: Score = 0.0;
     for (ix, ix_count) in temp_legs.into_iter() {
         if ix_count != appearances[ix as usize] {
             // not last appearance -> kept index contributes to new size
             new_legs.push((ix, ix_count));
-            size *= sizes[ix as usize];
+            size += sizes[ix as usize];
         }
     }
-    let new_score = iscore + jscore + size;
+    let new_score = logadd(logadd(iscore, jscore), size);
     (new_legs, new_score)
 }
 
 fn compute_con_cost_combo(
     temp_legs: Legs,
     appearances: &Vec<Count>,
-    sizes: &Vec<OScore>,
-    iscore: &OScore,
-    jscore: &OScore,
-    factor: OScore,
-) -> (Legs, OScore) {
+    sizes: &Vec<Score>,
+    iscore: Score,
+    jscore: Score,
+    factor: Score,
+) -> (Legs, Score) {
     // remove indices that have reached final appearance
     // and compute cost and size of local contraction
     let mut new_legs: Legs = Legs::with_capacity(temp_legs.len());
-    let mut size: OScore = 1;
-    let mut cost: OScore = 1;
+    let mut size: Score = 0.0;
+    let mut cost: Score = 0.0;
     for (ix, ix_count) in temp_legs.into_iter() {
         // all involved indices contribute to the cost
         let d = sizes[ix as usize];
-        cost *= d;
+        cost += d;
         if ix_count != appearances[ix as usize] {
             // not last appearance -> kept index contributes to new size
             new_legs.push((ix, ix_count));
-            size *= d;
+            size += d;
         }
     }
     // the score just for this contraction
-    let new_local_score = cost + factor * size;
+    let new_local_score = logadd(cost, factor + size);
 
     // the total score including history
-    let new_score = iscore + jscore + new_local_score;
+    let new_score = logadd(logadd(iscore, jscore), new_local_score);
 
     (new_legs, new_score)
 }
@@ -558,11 +586,11 @@ impl ContractionProcessor {
         &mut self,
         subgraph: Vec<Node>,
         minimize: Option<String>,
-        factor: Option<OScore>,
-        cost_cap: Option<OScore>,
+        factor: Option<Score>,
+        cost_cap: Option<Score>,
     ) {
         let minimize = minimize.unwrap_or("flops".to_string());
-        let factor = factor.unwrap_or(64);
+        let factor = f32::ln(factor.unwrap_or(64.0));
         let compute_cost = match minimize.as_str() {
             "flops" => compute_con_cost_flops,
             "size" => compute_con_cost_size,
@@ -580,7 +608,7 @@ impl ContractionProcessor {
         // intermediate storage for the entries we are expanding
         let mut contractions_m_temp: Vec<(Subgraph, SubContraction)> = Vec::new();
         // need to keep these separately
-        let mut best_scores: Dict<Subgraph, OScore> = Dict::default();
+        let mut best_scores: Dict<Subgraph, Score> = Dict::default();
 
         // we use linear index within terms given during optimization, this maps
         // back to the original node index
@@ -591,23 +619,16 @@ impl ContractionProcessor {
             let isubgraph = single_el_bitset(i, nterms);
             termmap.insert(isubgraph.clone(), node);
             let ilegs = self.nodes[&node].clone();
-            let iscore: OScore = 0;
+            let iscore: Score = 0.0;
             let ipath: BitPath = Vec::new();
             contractions[1].insert(isubgraph, (ilegs, iscore, ipath));
         }
-
-        // turn the log(size) back into ints for optimal:
-        let sizes: Vec<OScore> = self
-            .sizes
-            .iter()
-            .map(|ls| f32::exp(*ls) as OScore)
-            .collect();
 
         let mut ip: usize;
         let mut jp: usize;
         let mut outer: bool;
 
-        let cost_cap_incr = 2;
+        let cost_cap_incr = f32::ln(2.0);
         let mut cost_cap = cost_cap.unwrap_or(cost_cap_incr);
         while contractions[nterms].len() == 0 {
             // try building subgraphs of size m
@@ -657,9 +678,9 @@ impl ContractionProcessor {
                             let (new_legs, new_score) = compute_cost(
                                 temp_legs,
                                 &self.appearances,
-                                &sizes,
-                                iscore,
-                                jscore,
+                                &self.sizes,
+                                *iscore,
+                                *jscore,
                                 factor,
                             );
 
@@ -701,7 +722,7 @@ impl ContractionProcessor {
                     });
                 }
             }
-            cost_cap *= cost_cap_incr;
+            cost_cap += cost_cap_incr;
         }
         // can only ever be a single entry in contractions[nterms] -> the best one
         let (_, _, best_path) = contractions[nterms].values().next().unwrap();
@@ -719,39 +740,16 @@ impl ContractionProcessor {
     fn optimize_optimal(
         &mut self,
         minimize: Option<String>,
-        factor: Option<OScore>,
-        cost_cap: Option<OScore>,
+        factor: Option<Score>,
+        cost_cap: Option<Score>,
     ) {
         for subgraph in self.subgraphs() {
             self.optimize_optimal_connected(subgraph, minimize.clone(), factor, cost_cap);
         }
     }
-
-    fn optimize_remaining_by_size(&mut self) {
-        if self.nodes.len() == 1 {
-            // nothing to do
-            return;
-        };
-
-        let mut nodes_sizes: BinaryHeap<(GreedyScore, Node)> = BinaryHeap::default();
-        self.nodes.iter().for_each(|(node, legs)| {
-            nodes_sizes.push((OrderedFloat(-compute_size(&legs, &self.sizes)), *node));
-        });
-
-        let (_, mut i) = nodes_sizes.pop().unwrap();
-        let (_, mut j) = nodes_sizes.pop().unwrap();
-        let mut k = self.contract_nodes(i, j);
-
-        while self.nodes.len() > 1 {
-            // contract the smallest two nodes until only one remains
-            let ksize = compute_size(&self.nodes[&k], &self.sizes);
-            nodes_sizes.push((OrderedFloat(-ksize), k));
-            (_, i) = nodes_sizes.pop().unwrap();
-            (_, j) = nodes_sizes.pop().unwrap();
-            k = self.contract_nodes(i, j);
-        }
-    }
 }
+
+// --------------------------- PYTHON FUNCTIONS ---------------------------- //
 
 #[pyfunction]
 #[pyo3()]
@@ -803,8 +801,8 @@ fn optimize_optimal(
     output: Vec<char>,
     size_dict: Dict<char, u32>,
     minimize: Option<String>,
-    factor: Option<OScore>,
-    cost_cap: Option<OScore>,
+    factor: Option<Score>,
+    cost_cap: Option<Score>,
     simplify: Option<bool>,
 ) -> Vec<Vec<Node>> {
     let mut cp = ContractionProcessor::new(inputs, output, size_dict);
