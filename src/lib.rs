@@ -12,8 +12,8 @@ type Ix = u16;
 type Count = u8;
 type Legs = Vec<(Ix, Count)>;
 type Node = u16;
-type Score = OrderedFloat<f32>;
-type GreedyScore = OrderedFloat<f32>;
+type Score = f32;
+type GreedyScore = OrderedFloat<Score>;
 type SSAPath = Vec<Vec<Node>>;
 
 /// helper struct to build contractions from bottom up
@@ -29,16 +29,16 @@ struct ContractionProcessor {
 /// given log(x) and log(y) compute log(x + y), without exponentiating both
 fn logadd(lx: Score, ly: Score) -> Score {
     let (lx, ly) = if lx > ly { (lx, ly) } else { (ly, lx) };
-    lx + OrderedFloat(f32::ln_1p(f32::exp(ly.into_inner() - lx.into_inner())))
+    lx + f32::ln_1p(f32::exp(ly - lx))
 }
 
 /// given log(x) and log(y) compute log(x - y), without exponentiating both,
 /// if (x - y) is negative, return -log(x - y).
 fn logsub(lx: Score, ly: Score) -> Score {
     if lx < ly {
-        -ly - OrderedFloat(f32::ln_1p(-f32::exp(lx.into_inner() - ly.into_inner())))
+        -ly - f32::ln_1p(-f32::exp(lx - ly))
     } else {
-        lx + OrderedFloat(f32::ln_1p(-f32::exp(ly.into_inner() - lx.into_inner())))
+        lx + f32::ln_1p(-f32::exp(ly - lx))
     }
 }
 
@@ -144,7 +144,7 @@ impl ContractionProcessor {
                         indmap.insert(ind, c);
                         edges.insert(c, vec![i as Node]);
                         appearances.push(1);
-                        sizes.push(OrderedFloat(f32::log(size_dict[&ind] as f32, 2.0)));
+                        sizes.push(f32::log(size_dict[&ind] as f32, 2.0));
                         legs.push((c, 1));
                         c += 1;
                     }
@@ -399,7 +399,7 @@ impl ContractionProcessor {
                     let klegs = compute_legs(&self.nodes[&i], &self.nodes[&j], &self.appearances);
                     let ksize = compute_size(&klegs, &self.sizes);
                     let score = local_score(isize, jsize, ksize);
-                    queue.push((-score, c));
+                    queue.push((OrderedFloat(-score), c));
                     contractions.insert(c, (i, j, ksize, klegs));
                     c -= 1;
                 }
@@ -430,7 +430,7 @@ impl ContractionProcessor {
                 let mlegs = compute_legs(&klegs, llegs, &self.appearances);
                 let msize = compute_size(&mlegs, &self.sizes);
                 let score = local_score(ksize, lsize, msize);
-                queue.push((-score, c));
+                queue.push((OrderedFloat(-score), c));
                 contractions.insert(c, (k, l, msize, mlegs));
                 c -= 1;
             }
@@ -600,14 +600,15 @@ impl ContractionProcessor {
         let sizes: Vec<OScore> = self
             .sizes
             .iter()
-            .map(|ls| f32::exp(ls.into_inner()) as OScore)
+            .map(|ls| f32::exp(*ls) as OScore)
             .collect();
 
         let mut ip: usize;
         let mut jp: usize;
         let mut outer: bool;
 
-        let mut cost_cap = cost_cap.unwrap_or(1);
+        let cost_cap_incr = 2;
+        let mut cost_cap = cost_cap.unwrap_or(cost_cap_incr);
         while contractions[nterms].len() == 0 {
             // try building subgraphs of size m
             for m in 2..=nterms {
@@ -681,7 +682,8 @@ impl ContractionProcessor {
                             if found_new_best {
                                 best_scores.insert(new_subgraph.clone(), new_score);
                                 // only need the path if updating
-                                let mut new_path: BitPath = Vec::with_capacity(ipath.len() + jpath.len() + 1);
+                                let mut new_path: BitPath =
+                                    Vec::with_capacity(ipath.len() + jpath.len() + 1);
                                 new_path.extend_from_slice(&ipath);
                                 new_path.extend_from_slice(&jpath);
                                 new_path.push((isubgraph.clone(), jsubgraph.clone()));
@@ -699,7 +701,7 @@ impl ContractionProcessor {
                     });
                 }
             }
-            cost_cap *= 2;
+            cost_cap *= cost_cap_incr;
         }
         // can only ever be a single entry in contractions[nterms] -> the best one
         let (_, _, best_path) = contractions[nterms].values().next().unwrap();
@@ -731,9 +733,9 @@ impl ContractionProcessor {
             return;
         };
 
-        let mut nodes_sizes: BinaryHeap<(Score, Node)> = BinaryHeap::default();
+        let mut nodes_sizes: BinaryHeap<(GreedyScore, Node)> = BinaryHeap::default();
         self.nodes.iter().for_each(|(node, legs)| {
-            nodes_sizes.push((compute_size(&legs, &self.sizes), *node));
+            nodes_sizes.push((OrderedFloat(-compute_size(&legs, &self.sizes)), *node));
         });
 
         let (_, mut i) = nodes_sizes.pop().unwrap();
@@ -743,7 +745,7 @@ impl ContractionProcessor {
         while self.nodes.len() > 1 {
             // contract the smallest two nodes until only one remains
             let ksize = compute_size(&self.nodes[&k], &self.sizes);
-            nodes_sizes.push((ksize, k));
+            nodes_sizes.push((OrderedFloat(-ksize), k));
             (_, i) = nodes_sizes.pop().unwrap();
             (_, j) = nodes_sizes.pop().unwrap();
             k = self.contract_nodes(i, j);
