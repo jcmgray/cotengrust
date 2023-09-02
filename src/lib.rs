@@ -2,6 +2,7 @@ use bit_set::BitSet;
 use ordered_float::OrderedFloat;
 use pyo3::prelude::*;
 use rand::Rng;
+use regex::Regex;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeSet, BinaryHeap};
 use std::f32;
@@ -579,26 +580,71 @@ fn compute_con_cost_combo(
     (new_legs, new_score)
 }
 
+fn compute_con_cost_limit(
+    temp_legs: Legs,
+    appearances: &Vec<Count>,
+    sizes: &Vec<Score>,
+    iscore: Score,
+    jscore: Score,
+    factor: Score,
+) -> (Legs, Score) {
+    // remove indices that have reached final appearance
+    // and compute cost and size of local contraction
+    let mut new_legs: Legs = Legs::with_capacity(temp_legs.len());
+    let mut size: Score = 0.0;
+    let mut cost: Score = 0.0;
+    for (ix, ix_count) in temp_legs.into_iter() {
+        // all involved indices contribute to the cost
+        let d = sizes[ix as usize];
+        cost += d;
+        if ix_count != appearances[ix as usize] {
+            // not last appearance -> kept index contributes to new size
+            new_legs.push((ix, ix_count));
+            size += d;
+        }
+    }
+    // whichever is more expensive, the cost or the scaled write
+    let new_local_score = cost.max(factor + size);
+
+    // the total score including history
+    let new_score = logadd(logadd(iscore, jscore), new_local_score);
+
+    (new_legs, new_score)
+}
+
 impl ContractionProcessor {
     fn optimize_optimal_connected(
         &mut self,
         subgraph: Vec<Node>,
         minimize: Option<String>,
-        factor: Option<Score>,
         cost_cap: Option<Score>,
+        allow_outer: Option<bool>,
     ) {
+        // parse the minimize
         let minimize = minimize.unwrap_or("flops".to_string());
-        let factor = f32::ln(factor.unwrap_or(64.0));
-        let compute_cost = match minimize.as_str() {
+
+        let re = Regex::new(r"^(flops|size|write|combo|limit)(?:-(\d+(?:\.\d+)?))?$").unwrap();
+        let captures = re.captures(minimize.as_str()).unwrap();
+        let minimize_type = captures.get(1).unwrap().as_str();
+        let factor = f32::ln(
+            captures
+                .get(2)
+                .map(|m| m.as_str().parse::<f32>().unwrap())
+                .unwrap_or(64.),
+        );
+
+        let compute_cost = match minimize_type {
             "flops" => compute_con_cost_flops,
             "size" => compute_con_cost_size,
             "write" => compute_con_cost_write,
             "combo" => compute_con_cost_combo,
+            "limit" => compute_con_cost_limit,
             _ => panic!(
-                "minimize must be one of 'flops', 'size', 'write', or 'combo', got {}",
+                "minimize must be one of 'flops', 'size', 'write', 'combo', or 'limit', got {}",
                 minimize
             ),
         };
+        let allow_outer = allow_outer.unwrap_or(false);
 
         // storage for each possible contraction to reach subgraph of size m
         let mut contractions: Vec<Dict<Subgraph, SubContraction>> =
@@ -624,7 +670,7 @@ impl ContractionProcessor {
 
         let mut ip: usize;
         let mut jp: usize;
-        let mut outer: bool;
+        let mut skip_because_outer: bool;
 
         let cost_cap_incr = f32::ln(2.0);
         let mut cost_cap = cost_cap.unwrap_or(cost_cap_incr);
@@ -647,7 +693,8 @@ impl ContractionProcessor {
                             let mut temp_legs: Legs = Vec::with_capacity(ilegs.len() + jlegs.len());
                             ip = 0;
                             jp = 0;
-                            outer = true;
+                            // if allow_outer -> we will never skip
+                            skip_because_outer = !allow_outer;
                             while ip < ilegs.len() && jp < jlegs.len() {
                                 if ilegs[ip].0 < jlegs[jp].0 {
                                     // index only appears in ilegs
@@ -662,10 +709,10 @@ impl ContractionProcessor {
                                     temp_legs.push((ilegs[ip].0, ilegs[ip].1 + jlegs[jp].1));
                                     ip += 1;
                                     jp += 1;
-                                    outer = false;
+                                    skip_because_outer = false;
                                 }
                             }
-                            if outer {
+                            if skip_because_outer {
                                 // no shared indices -> outer product
                                 continue;
                             }
@@ -683,7 +730,7 @@ impl ContractionProcessor {
                             );
 
                             if new_score > cost_cap {
-                                // contraction not allowed yet due to cost
+                                // contraction not allowed yet due to 'sieve'
                                 continue;
                             }
 
@@ -711,10 +758,10 @@ impl ContractionProcessor {
                             }
                         }
                     }
-                    // move new contractions from temp into the main storage, there
-                    // might be contractions for the same subgraph in this, but
-                    // because we check eagerly best_scores above, later entries
-                    // are guaranteed to be better
+                    // move new contractions from temp into the main storage,
+                    // there might be contractions for the same subgraph in
+                    // this, but because we check eagerly best_scores above,
+                    // later entries are guaranteed to be better
                     contractions_m_temp.drain(..).for_each(|(k, v)| {
                         contractions[m].insert(k, v);
                     });
@@ -722,7 +769,7 @@ impl ContractionProcessor {
             }
             cost_cap += cost_cap_incr;
         }
-        // can only ever be a single entry in contractions[nterms] -> the best one
+        // can only ever be a single entry in contractions[nterms] -> the best
         let (_, _, best_path) = contractions[nterms].values().next().unwrap();
 
         // convert from the bitpath to the actual (subgraph) node ids
@@ -738,11 +785,11 @@ impl ContractionProcessor {
     fn optimize_optimal(
         &mut self,
         minimize: Option<String>,
-        factor: Option<Score>,
         cost_cap: Option<Score>,
+        allow_outer: Option<bool>,
     ) {
         for subgraph in self.subgraphs() {
-            self.optimize_optimal_connected(subgraph, minimize.clone(), factor, cost_cap);
+            self.optimize_optimal_connected(subgraph, minimize.clone(), cost_cap, allow_outer);
         }
     }
 }
@@ -799,15 +846,15 @@ fn optimize_optimal(
     output: Vec<char>,
     size_dict: Dict<char, f32>,
     minimize: Option<String>,
-    factor: Option<Score>,
     cost_cap: Option<Score>,
+    allow_outer: Option<bool>,
     simplify: Option<bool>,
 ) -> Vec<Vec<Node>> {
     let mut cp = ContractionProcessor::new(inputs, output, size_dict);
     if simplify.unwrap_or(true) {
         cp.simplify();
     }
-    cp.optimize_optimal(minimize, factor, cost_cap);
+    cp.optimize_optimal(minimize, cost_cap, allow_outer);
     // optimize any remaining disconnected terms
     cp.optimize_remaining_by_size();
     cp.ssa_path
