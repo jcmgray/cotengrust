@@ -13,7 +13,6 @@ bit-set = "0.5"
 pyo3 = "0.19"
 ordered-float = "3.9"
 rand = "0.8"
-regex = "1.9"
 rustc-hash = "1.1"
 
 [profile.release]

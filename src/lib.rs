@@ -2,7 +2,6 @@ use bit_set::BitSet;
 use ordered_float::OrderedFloat;
 use pyo3::prelude::*;
 use rand::Rng;
-use regex::Regex;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeSet, BinaryHeap};
 use std::f32;
@@ -620,19 +619,18 @@ impl ContractionProcessor {
         cost_cap: Option<Score>,
         allow_outer: Option<bool>,
     ) {
-        // parse the minimize
+        // parse the minimize argument
         let minimize = minimize.unwrap_or("flops".to_string());
-
-        let re = Regex::new(r"^(flops|size|write|combo|limit)(?:-(\d+(?:\.\d+)?))?$").unwrap();
-        let captures = re.captures(minimize.as_str()).unwrap();
-        let minimize_type = captures.get(1).unwrap().as_str();
-        let factor = f32::ln(
-            captures
-                .get(2)
-                .map(|m| m.as_str().parse::<f32>().unwrap())
-                .unwrap_or(64.),
-        );
-
+        let mut minimize_split = minimize.split('-');
+        let minimize_type = minimize_split.next().unwrap();
+        let factor = minimize_split
+            .next()
+            .map_or(64.0, |s| s.parse::<f32>().unwrap())
+            .ln();
+        if minimize_split.next().is_some() {
+            // multiple hyphens -> raise error
+            panic!("invalid minimize: {:?}", minimize);
+        }
         let compute_cost = match minimize_type {
             "flops" => compute_con_cost_flops,
             "size" => compute_con_cost_size,
