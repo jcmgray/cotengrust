@@ -1,16 +1,22 @@
-[build-system]
-requires = ["maturin>=0.15,<0.16"]
-build-backend = "maturin"
-
 [project]
 name = "cotengrust"
-requires-python = ">=3.7"
+version = "0.1.0"
+description = "Fast contraction ordering primitives for tensor networks."
+requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+license = { file = "LICENSE" }
+authors = [
+    {name = "Johnnie Gray", email = "johnniemcgray@gmail.com"}
 
+]
+
+[build-system]
+requires = ["maturin>=0.15,<0.16"]
+build-backend = "maturin"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
