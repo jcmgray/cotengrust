@@ -1,3 +1,3 @@
 pytest
 numpy
-cotengra
+cotengra >= 0.3.1
