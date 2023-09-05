@@ -47,7 +47,7 @@ jobs:
         run: |
           set -e
           pip install cotengrust --find-links dist --force-reinstall
-          pip install pytest
+          pip install -r requirements-tests.txt
           pytest
       - name: pytest
         if: ${{ !startsWith(matrix.target, 'x86') && matrix.target != 'ppc64' }}
@@ -93,7 +93,7 @@ jobs:
         run: |
           set -e
           pip install cotengrust --find-links dist --force-reinstall
-          pip install pytest
+          pip install -r requirements-tests.txt
           pytest
 
   macos:
@@ -123,7 +123,7 @@ jobs:
         run: |
           set -e
           pip install cotengrust --find-links dist --force-reinstall
-          pip install pytest
+          pip install -r requirements-tests.txt
           pytest
 
   sdist:
