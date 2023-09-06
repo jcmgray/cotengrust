@@ -271,28 +271,27 @@ impl ContractionProcessor {
     /// combine and remove all scalars
     fn simplify_scalars(&mut self) {
         let mut scalars = Vec::new();
+        let mut j: Option<Node> = None;
+        let mut jndim: usize = 0;
         for (i, legs) in self.nodes.iter() {
-            if legs.len() == 0 {
+            let ndim = legs.len();
+            if ndim == 0 {
                 scalars.push(*i);
+            } else {
+                // also search for smallest other term to multiply into
+                if j.is_none() || ndim < jndim {
+                    j = Some(*i);
+                    jndim = ndim;
+                }
             }
         }
         if scalars.len() > 0 {
-            for &i in &scalars {
-                self.pop_node(i);
+            for p in 0..scalars.len() - 1 {
+                let i = scalars[p];
+                let j = scalars[p + 1];
+                let k = self.contract_nodes(i, j);
+                scalars[p + 1] = k;
             }
-            let (res, con) = match self.nodes.iter().min_by_key(|&(_, legs)| legs.len()) {
-                Some((&j, _)) => {
-                    let res = self.pop_node(j);
-                    let con: Vec<Node> = scalars.into_iter().chain(vec![j].into_iter()).collect();
-                    (res, con)
-                }
-                None => {
-                    let res = Vec::new();
-                    (res, scalars)
-                }
-            };
-            self.add_node(res);
-            self.ssa_path.push(con);
         }
     }
 
