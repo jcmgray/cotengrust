@@ -2,6 +2,7 @@
 name = "cotengrust"
 version = "0.1.1"
 description = "Fast contraction ordering primitives for tensor networks."
+readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -11,7 +12,6 @@ classifiers = [
 license = { file = "LICENSE" }
 authors = [
     {name = "Johnnie Gray", email = "johnniemcgray@gmail.com"}
-
 ]
 
 [build-system]
