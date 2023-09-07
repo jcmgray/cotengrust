@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          pip install cotengrust --find-links dist --force-reinstall
+          pip install cotengrust -U --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
           pytest --verbose -x
       - name: pytest
@@ -93,7 +93,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          pip install cotengrust --find-links dist --force-reinstall
+          pip install cotengrust -U --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
           pytest --verbose -x
 
@@ -123,7 +123,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          pip install cotengrust --find-links dist --force-reinstall
+          pip install cotengrust -U --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
           pytest --verbose -x
 
