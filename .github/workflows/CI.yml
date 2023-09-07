@@ -48,7 +48,7 @@ jobs:
           set -e
           pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose
+          pytest --verbose -x
       - name: pytest
         if: ${{ !startsWith(matrix.target, 'x86') && matrix.target != 'ppc64' }}
         uses: uraimo/run-on-arch-action@v2.5.0
@@ -64,7 +64,7 @@ jobs:
           run: |
             set -e
             pip3 install cotengrust --find-links dist --force-reinstall
-            pytest --verbose
+            pytest --verbose -x
 
   windows:
     runs-on: windows-latest
@@ -95,7 +95,7 @@ jobs:
           set -e
           pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose
+          pytest --verbose -x
 
   macos:
     runs-on: macos-latest
@@ -125,7 +125,7 @@ jobs:
           set -e
           pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose
+          pytest --verbose -x
 
   sdist:
     runs-on: ubuntu-latest
