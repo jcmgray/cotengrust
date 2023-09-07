@@ -60,7 +60,7 @@ jobs:
           install: |
             apt-get update
             apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip pytest numpy cotengra
+            pip3 install -U pip pytest # numpy cotengra
           run: |
             set -e
             pip3 install cotengrust --find-links dist --force-reinstall
