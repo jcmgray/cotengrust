@@ -127,13 +127,13 @@ def test_manual_cases(eq, which):
     size_dict = get_rand_size_dict(inputs)
     arrays = build_arrays(inputs, size_dict)
     expected = np.einsum(eq, *arrays, optimize=True)
-
     path = {
         "greedy": ctgr.optimize_greedy,
         "optimal": ctgr.optimize_optimal,
     }[
         which
     ](inputs, output, size_dict)
+    assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(inputs, output, size_dict, path=path)
     assert_allclose(tree.contract(arrays), expected)
 
@@ -159,7 +159,7 @@ def test_basic_rand(seed, which):
     }[
         which
     ](inputs, output, size_dict)
-
+    assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(inputs, output, size_dict, path=path)
     arrays = [np.random.randn(*s) for s in shapes]
     assert_allclose(
@@ -179,6 +179,7 @@ def test_optimal_lattice_eq():
     assert tree.contraction_cost() == 3628
 
     path = ctgr.optimize_optimal(inputs, output, size_dict, minimize='size')
+    assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(
         inputs, output, size_dict, path=path
     )
