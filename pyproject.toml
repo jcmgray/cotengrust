@@ -1,6 +1,6 @@
 [project]
 name = "cotengrust"
-version = "0.1.1"
+version = "0.1.1.dev0"
 description = "Fast contraction ordering primitives for tensor networks."
 requires-python = ">=3.8"
 classifiers = [

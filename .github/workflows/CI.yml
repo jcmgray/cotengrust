@@ -34,7 +34,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'false'
+          sccache: 'true'
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v3
@@ -47,9 +47,9 @@ jobs:
         run: |
           set -e
           ls dist/*
-          pip install cotengrust -U --find-links dist --force-reinstall
+          pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose -x
+          pytest --verbose
       - name: pytest
         if: ${{ !startsWith(matrix.target, 'x86') && matrix.target != 'ppc64' }}
         uses: uraimo/run-on-arch-action@v2.5.0
@@ -65,7 +65,7 @@ jobs:
           run: |
             set -e
             pip3 install cotengrust --find-links dist --force-reinstall
-            pytest --verbose -x
+            pytest --verbose
 
   windows:
     runs-on: windows-latest
@@ -83,7 +83,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'false'
+          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -95,9 +95,9 @@ jobs:
         run: |
           set -e
           ls dist/*
-          pip install cotengrust -U --find-links dist --force-reinstall
+          pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose -x
+          pytest --verbose
 
   macos:
     runs-on: macos-latest
@@ -114,7 +114,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'false'
+          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -126,9 +126,9 @@ jobs:
         run: |
           set -e
           ls dist/*
-          pip install cotengrust -U --find-links dist --force-reinstall
+          pip install cotengrust --find-links dist --force-reinstall
           pip install -r requirements-tests.txt
-          pytest --verbose -x
+          pytest --verbose
 
   sdist:
     runs-on: ubuntu-latest
