@@ -56,6 +56,15 @@ def get_rand_size_dict(inputs, d_min=2, d_max=3):
 
 # these are taken from opt_einsum
 test_case_eqs = [
+    # Test single-term equations
+    "->",
+    "a->a",
+    "ab->ab",
+    "ab->ba",
+    "abc->bca",
+    "abc->b",
+    "baa->ba",
+    "aba->b",
     # Test scalar-like operations
     "a,->a",
     "ab,->ab",
