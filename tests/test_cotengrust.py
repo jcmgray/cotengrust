@@ -197,18 +197,39 @@ def test_basic_rand(seed, which):
 @requires_cotengra
 def test_optimal_lattice_eq():
     inputs, output, _, size_dict = ctg.utils.lattice_equation(
-        [4, 5], d_max=3, seed=42
+        [4, 5], d_max=2, seed=42
     )
 
     path = ctgr.optimize_optimal(inputs, output, size_dict, minimize='flops')
     tree = ctg.ContractionTree.from_path(
         inputs, output, size_dict, path=path
     )
-    assert tree.contraction_cost() == 3628
+    assert tree.is_complete()
+    assert tree.contraction_cost() == 964
 
     path = ctgr.optimize_optimal(inputs, output, size_dict, minimize='size')
     assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(
         inputs, output, size_dict, path=path
     )
-    assert tree.contraction_width() == pytest.approx(6.754887502163468)
+    assert tree.contraction_width() == pytest.approx(5)
+
+
+@requires_cotengra
+def test_optimize_random_greedy_log_flops():
+    inputs, output, _, size_dict = ctg.utils.lattice_equation(
+        [10, 10], d_max=3, seed=42
+    )
+
+    path, cost1 = ctgr.optimize_random_greedy_track_flops(
+        inputs, output, size_dict, ntrials=4, seed=42
+    )
+    _, cost2 = ctgr.optimize_random_greedy_track_flops(
+        inputs, output, size_dict, ntrials=4, seed=42
+    )
+    assert cost1 == cost2
+    tree = ctg.ContractionTree.from_path(
+        inputs, output, size_dict, path=path
+    )
+    assert tree.is_complete()
+    assert tree.contraction_cost(log=10) == pytest.approx(cost1)

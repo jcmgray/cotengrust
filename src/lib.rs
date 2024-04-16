@@ -2,8 +2,9 @@ use bit_set::BitSet;
 use ordered_float::OrderedFloat;
 use pyo3::prelude::*;
 use rand::Rng;
+use rand::SeedableRng;
 use rustc_hash::FxHashMap;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::{BTreeSet, BinaryHeap, HashSet};
 use std::f32;
 
 use FxHashMap as Dict;
@@ -23,6 +24,7 @@ type BitPath = Vec<(Subgraph, Subgraph)>;
 type SubContraction = (Legs, Score, BitPath);
 
 /// helper struct to build contractions from bottom up
+#[derive(Clone)]
 struct ContractionProcessor {
     nodes: Dict<Node, Legs>,
     edges: Dict<Ix, BTreeSet<Node>>,
@@ -30,6 +32,8 @@ struct ContractionProcessor {
     sizes: Vec<Score>,
     ssa: Node,
     ssa_path: SSAPath,
+    track_flops: bool,
+    flops: Score,
 }
 
 /// given log(x) and log(y) compute log(x + y), without exponentiating both
@@ -94,6 +98,21 @@ fn compute_size(legs: &Legs, sizes: &Vec<Score>) -> Score {
     legs.iter().map(|&(ix, _)| sizes[ix as usize]).sum()
 }
 
+fn compute_flops(ilegs: &Legs, jlegs: &Legs, sizes: &Vec<Score>) -> Score {
+    let mut flops: Score = 0.0;
+    let mut seen: HashSet<Ix> = HashSet::with_capacity(ilegs.len());
+    for &(ix, _) in ilegs {
+        seen.insert(ix);
+        flops += sizes[ix as usize];
+    }
+    for (ix, _) in jlegs {
+        if !seen.contains(ix) {
+            flops += sizes[*ix as usize];
+        }
+    }
+    flops
+}
+
 fn is_simplifiable(legs: &Legs, appearances: &Vec<Count>) -> bool {
     let mut prev_ix = Node::MAX;
     for &(ix, ix_count) in legs {
@@ -131,6 +150,7 @@ impl ContractionProcessor {
         inputs: Vec<Vec<char>>,
         output: Vec<char>,
         size_dict: Dict<char, f32>,
+        track_flops: bool,
     ) -> ContractionProcessor {
         let mut nodes: Dict<Node, Legs> = Dict::default();
         let mut edges: Dict<Ix, BTreeSet<Node>> = Dict::default();
@@ -149,7 +169,7 @@ impl ContractionProcessor {
                         indmap.insert(ind, c);
                         edges.insert(c, std::iter::once(i as Node).collect());
                         appearances.push(1);
-                        sizes.push(f32::log(size_dict[&ind] as f32, 2.0));
+                        sizes.push(f32::ln(size_dict[&ind] as f32));
                         legs.push((c, 1));
                         c += 1;
                     }
@@ -170,6 +190,7 @@ impl ContractionProcessor {
 
         let ssa = nodes.len() as Node;
         let ssa_path: SSAPath = Vec::with_capacity(2 * ssa as usize - 1);
+        let flops: Score = 0.0;
 
         ContractionProcessor {
             nodes,
@@ -178,6 +199,8 @@ impl ContractionProcessor {
             sizes,
             ssa,
             ssa_path,
+            track_flops,
+            flops,
         }
     }
 
@@ -225,7 +248,9 @@ impl ContractionProcessor {
         for (ix, _) in &legs {
             self.edges
                 .entry(*ix)
-                .and_modify(|nodes| {nodes.insert(i);})
+                .and_modify(|nodes| {
+                    nodes.insert(i);
+                })
                 .or_insert(std::iter::once(i as Node).collect());
         }
         self.nodes.insert(i, legs);
@@ -236,7 +261,22 @@ impl ContractionProcessor {
     fn contract_nodes(&mut self, i: Node, j: Node) -> Node {
         let ilegs = self.pop_node(i);
         let jlegs = self.pop_node(j);
+        if self.track_flops {
+            self.flops = logadd(self.flops, compute_flops(&ilegs, &jlegs, &self.sizes));
+        }
         let new_legs = compute_legs(&ilegs, &jlegs, &self.appearances);
+        let k = self.add_node(new_legs);
+        self.ssa_path.push(vec![i, j]);
+        k
+    }
+
+    /// contract two nodes (which we already know the legs for), return the new node id
+    fn contract_nodes_given_legs(&mut self, i: Node, j: Node, new_legs: Legs) -> Node {
+        let ilegs = self.pop_node(i);
+        let jlegs = self.pop_node(j);
+        if self.track_flops {
+            self.flops = logadd(self.flops, compute_flops(&ilegs, &jlegs, &self.sizes));
+        }
         let k = self.add_node(new_legs);
         self.ssa_path.push(vec![i, j]);
         k
@@ -366,13 +406,27 @@ impl ContractionProcessor {
     }
 
     /// greedily optimize the contraction order of all terms
-    fn optimize_greedy(&mut self, costmod: Option<f32>, temperature: Option<f32>) {
-        let mut rng = rand::thread_rng();
+    fn optimize_greedy(
+        &mut self,
+        costmod: Option<f32>,
+        temperature: Option<f32>,
+        seed: Option<u64>,
+    ) {
         let coeff_t = temperature.unwrap_or(0.0);
         let log_coeff_a = f32::ln(costmod.unwrap_or(1.0));
 
+        let mut rng = if coeff_t != 0.0 {
+            Some(match seed {
+                Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
+                None => rand::rngs::StdRng::from_entropy(),
+            })
+        } else {
+            // zero temp - no need for rng
+            None
+        };
+
         let mut local_score = |sa: Score, sb: Score, sab: Score| -> Score {
-            let gumbel = if coeff_t != 0.0 {
+            let gumbel = if let Some(rng) = &mut rng {
                 coeff_t * -f32::ln(-f32::ln(rng.gen()))
             } else {
                 0.0 as f32
@@ -424,11 +478,7 @@ impl ContractionProcessor {
             }
 
             // perform contraction:
-            // we already have the legs, so don't call contract_nodes
-            self.pop_node(i);
-            self.pop_node(j);
-            let k = self.add_node(klegs.clone());
-            self.ssa_path.push(vec![i, j]);
+            let k = self.contract_nodes_given_legs(i, j, klegs.clone());
             node_sizes.insert(k, ksize);
 
             for l in self.neighbors(k) {
@@ -800,7 +850,6 @@ impl ContractionProcessor {
 // --------------------------- PYTHON FUNCTIONS ---------------------------- //
 
 #[pyfunction]
-#[pyo3()]
 fn ssa_to_linear(ssa_path: SSAPath, n: Option<usize>) -> SSAPath {
     let n = match n {
         Some(n) => n,
@@ -828,18 +877,16 @@ fn ssa_to_linear(ssa_path: SSAPath, n: Option<usize>) -> SSAPath {
 }
 
 #[pyfunction]
-#[pyo3()]
 fn find_subgraphs(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
     size_dict: Dict<char, f32>,
 ) -> Vec<Vec<Node>> {
-    let cp = ContractionProcessor::new(inputs, output, size_dict);
+    let cp = ContractionProcessor::new(inputs, output, size_dict, false);
     cp.subgraphs()
 }
 
 #[pyfunction]
-#[pyo3()]
 fn optimize_simplify(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
@@ -847,7 +894,7 @@ fn optimize_simplify(
     use_ssa: Option<bool>,
 ) -> SSAPath {
     let n = inputs.len();
-    let mut cp = ContractionProcessor::new(inputs, output, size_dict);
+    let mut cp = ContractionProcessor::new(inputs, output, size_dict, false);
     cp.simplify();
     if use_ssa.unwrap_or(false) {
         cp.ssa_path
@@ -857,36 +904,94 @@ fn optimize_simplify(
 }
 
 #[pyfunction]
-#[pyo3()]
 fn optimize_greedy(
+    py: Python,
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
     size_dict: Dict<char, f32>,
     costmod: Option<f32>,
     temperature: Option<f32>,
+    seed: Option<u64>,
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> Vec<Vec<Node>> {
-    let n = inputs.len();
-    let mut cp = ContractionProcessor::new(inputs, output, size_dict);
-    if simplify.unwrap_or(true) {
-        // perform simplifications
-        cp.simplify();
-    }
-    // greddily contract each connected subgraph
-    cp.optimize_greedy(costmod, temperature);
-    // optimize any remaining disconnected terms
-    cp.optimize_remaining_by_size();
-    if use_ssa.unwrap_or(false) {
-        cp.ssa_path
-    } else {
-        ssa_to_linear(cp.ssa_path, Some(n))
-    }
+    py.allow_threads(|| {
+        let n = inputs.len();
+        let mut cp = ContractionProcessor::new(inputs, output, size_dict, false);
+        if simplify.unwrap_or(true) {
+            // perform simplifications
+            cp.simplify();
+        }
+        // greedily contract each connected subgraph
+        cp.optimize_greedy(costmod, temperature, seed);
+        // optimize any remaining disconnected terms
+        cp.optimize_remaining_by_size();
+        if use_ssa.unwrap_or(false) {
+            cp.ssa_path
+        } else {
+            ssa_to_linear(cp.ssa_path, Some(n))
+        }
+    })
 }
 
 #[pyfunction]
-#[pyo3()]
+fn optimize_random_greedy_track_flops(
+    py: Python,
+    inputs: Vec<Vec<char>>,
+    output: Vec<char>,
+    size_dict: Dict<char, f32>,
+    ntrials: usize,
+    costmod: Option<f32>,
+    temperature: Option<f32>,
+    seed: Option<u64>,
+    simplify: Option<bool>,
+    use_ssa: Option<bool>,
+) -> (Vec<Vec<Node>>, Score) {
+    py.allow_threads(|| {
+        let temperature = temperature.unwrap_or(0.01);
+        let mut rng = match seed {
+            Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        let seeds = (0..ntrials).map(|_| rng.gen()).collect::<Vec<u64>>();
+
+        let n: usize = inputs.len();
+        // construct processor and perform simplifications once
+        let mut cp0 = ContractionProcessor::new(inputs, output, size_dict, true);
+        if simplify.unwrap_or(true) {
+            cp0.simplify();
+        }
+
+        let mut best_path = None;
+        let mut best_flops = f32::INFINITY;
+
+        for seed in seeds {
+            let mut cp = cp0.clone();
+            // greedily contract each connected subgraph
+            cp.optimize_greedy(costmod, Some(temperature), Some(seed));
+            // optimize any remaining disconnected terms
+            cp.optimize_remaining_by_size();
+
+            if cp.flops < best_flops {
+                best_flops = cp.flops;
+                best_path = Some(cp.ssa_path);
+            }
+        }
+
+        // convert to base 10 for easier comparison
+        best_flops *= f32::consts::LOG10_E;
+
+        if use_ssa.unwrap_or(false) {
+            (best_path.unwrap(), best_flops)
+        } else {
+            (ssa_to_linear(best_path.unwrap(), Some(n)), best_flops)
+        }
+    })
+}
+
+#[pyfunction]
 fn optimize_optimal(
+    py: Python,
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
     size_dict: Dict<char, f32>,
@@ -896,30 +1001,33 @@ fn optimize_optimal(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> Vec<Vec<Node>> {
-    let n = inputs.len();
-    let mut cp = ContractionProcessor::new(inputs, output, size_dict);
-    if simplify.unwrap_or(true) {
-        // perform simplifications
-        cp.simplify();
-    }
-    // optimally contract each connected subgraph
-    cp.optimize_optimal(minimize, cost_cap, search_outer);
-    // optimize any remaining disconnected terms
-    cp.optimize_remaining_by_size();
-    if use_ssa.unwrap_or(false) {
-        cp.ssa_path
-    } else {
-        ssa_to_linear(cp.ssa_path, Some(n))
-    }
+    py.allow_threads(|| {
+        let n = inputs.len();
+        let mut cp = ContractionProcessor::new(inputs, output, size_dict, false);
+        if simplify.unwrap_or(true) {
+            // perform simplifications
+            cp.simplify();
+        }
+        // optimally contract each connected subgraph
+        cp.optimize_optimal(minimize, cost_cap, search_outer);
+        // optimize any remaining disconnected terms
+        cp.optimize_remaining_by_size();
+        if use_ssa.unwrap_or(false) {
+            cp.ssa_path
+        } else {
+            ssa_to_linear(cp.ssa_path, Some(n))
+        }
+    })
 }
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn cotengrust(_py: Python, m: &PyModule) -> PyResult<()> {
+fn cotengrust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ssa_to_linear, m)?)?;
     m.add_function(wrap_pyfunction!(find_subgraphs, m)?)?;
     m.add_function(wrap_pyfunction!(optimize_simplify, m)?)?;
     m.add_function(wrap_pyfunction!(optimize_greedy, m)?)?;
+    m.add_function(wrap_pyfunction!(optimize_random_greedy_track_flops, m)?)?;
     m.add_function(wrap_pyfunction!(optimize_optimal, m)?)?;
     Ok(())
 }
