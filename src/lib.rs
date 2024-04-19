@@ -152,6 +152,10 @@ impl ContractionProcessor {
         size_dict: Dict<char, f32>,
         track_flops: bool,
     ) -> ContractionProcessor {
+        if size_dict.len() > Ix::MAX as usize {
+            panic!("cotengrust: too many indices, maximum is {}", Ix::MAX);
+        }
+
         let mut nodes: Dict<Node, Legs> = Dict::default();
         let mut edges: Dict<Ix, BTreeSet<Node>> = Dict::default();
         let mut indmap: Dict<char, Ix> = Dict::default();
