@@ -7,8 +7,13 @@ are:
 - `optimize_optimal(inputs, output, size_dict, **kwargs)`
 - `optimize_greedy(inputs, output, size_dict, **kwargs)`
 
-The optimal algorithm is an optimized version of the `opt_einsum` 'dp' 
+The optimal algorithm is an optimized version of the `opt_einsum` 'dp'
 path - itself an implementation of https://arxiv.org/abs/1304.6112.
+
+There is also a variant of the greedy algorithm, which runs `ntrials` of greedy,
+randomized paths and computes and reports the flops cost (log10) simultaneously:
+
+- `optimize_random_greedy_track_flops(inputs, output, size_dict, **kwargs)`
 
 
 ## Installation
@@ -20,7 +25,7 @@ path - itself an implementation of https://arxiv.org/abs/1304.6112.
 pip install cotengrust
 ```
 
-or if you want to develop locally (which requires [pyo3](https://github.com/PyO3/pyo3) 
+or if you want to develop locally (which requires [pyo3](https://github.com/PyO3/pyo3)
 and [maturin](https://github.com/PyO3/maturin)):
 
 ```bash
@@ -34,8 +39,8 @@ maturin develop --release
 ## Usage
 
 If `cotengrust` is installed, then by default `cotengra` will use it for its
-greedy and optimal subroutines, notably subtree reconfiguration. You can also
-call the routines directly:
+greedy, random-greedy, and optimal subroutines, notably subtree
+reconfiguration. You can also call the routines directly:
 
 ```python
 import cotengra as ctg
@@ -222,6 +227,76 @@ def optimize_simplify(
         The contraction path, given as a sequence of pairs of node indices. It
         may also have single term contractions.
 
+    """
+    ...
+
+def optimize_random_greedy_track_flops(
+    inputs,
+    output,
+    size_dict,
+    ntrials=1,
+    costmod=1.0,
+    temperature=0.01,
+    seed=None,
+    simplify=True,
+    use_ssa=False,
+):
+    """Perform a batch of random greedy optimizations, simulteneously tracking
+    the best contraction path in terms of flops, so as to avoid constructing a
+    separate contraction tree.
+
+    Parameters
+    ----------
+    inputs : tuple[tuple[str]]
+        The indices of each input tensor.
+    output : tuple[str]
+        The indices of the output tensor.
+    size_dict : dict[str, int]
+        A dictionary mapping indices to their dimension.
+    ntrials : int, optional
+        The number of random greedy trials to perform. The default is 1.
+    costmod : float, optional
+        When assessing local greedy scores how much to weight the size of the
+        tensors removed compared to the size of the tensor added::
+
+            score = size_ab - costmod * (size_a + size_b)
+
+        This can be a useful hyper-parameter to tune.
+    temperature : float, optional
+        When asessing local greedy scores, how much to randomly perturb the
+        score. This is implemented as::
+
+            score -> sign(score) * log(|score|) - temperature * gumbel()
+
+        which implements boltzmann sampling.
+    seed : int, optional
+        The seed for the random number generator.
+    simplify : bool, optional
+        Whether to perform simplifications before optimizing. These are:
+
+            - ignore any indices that appear in all terms
+            - combine any repeated indices within a single term
+            - reduce any non-output indices that only appear on a single term
+            - combine any scalar terms
+            - combine any tensors with matching indices (hadamard products)
+
+        Such simpifications may be required in the general case for the proper
+        functioning of the core optimization, but may be skipped if the input
+        indices are already in a simplified form.
+    use_ssa : bool, optional
+        Whether to return the contraction path in 'single static assignment'
+        (SSA) format (i.e. as if each intermediate is appended to the list of
+        inputs, without removals). This can be quicker and easier to work with
+        than the 'linear recycled' format that `numpy` and `opt_einsum` use.
+
+    Returns
+    -------
+    path : list[list[int]]
+        The best contraction path, given as a sequence of pairs of node
+        indices.
+    flops : float
+        The flops (/ contraction cost / number of multiplications), of the best
+        contraction path, given log10.
     """
     ...
 
