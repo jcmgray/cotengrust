@@ -164,7 +164,7 @@ def optimize_greedy(
         When assessing local greedy scores how much to weight the size of the
         tensors removed compared to the size of the tensor added::
 
-            score = size_ab - costmod * (size_a + size_b)
+            score = size_ab / costmod - (size_a + size_b) * costmod
 
         This can be a useful hyper-parameter to tune.
     temperature : float, optional
@@ -235,8 +235,8 @@ def optimize_random_greedy_track_flops(
     output,
     size_dict,
     ntrials=1,
-    costmod=1.0,
-    temperature=0.01,
+    costmod=(0.1, 4.0),
+    temperature=(0.001, 1.0),
     seed=None,
     simplify=True,
     use_ssa=False,
@@ -255,20 +255,21 @@ def optimize_random_greedy_track_flops(
         A dictionary mapping indices to their dimension.
     ntrials : int, optional
         The number of random greedy trials to perform. The default is 1.
-    costmod : float, optional
+    costmod : (float, float), optional
         When assessing local greedy scores how much to weight the size of the
         tensors removed compared to the size of the tensor added::
 
-            score = size_ab - costmod * (size_a + size_b)
+            score = size_ab / costmod - (size_a + size_b) * costmod
 
-        This can be a useful hyper-parameter to tune.
-    temperature : float, optional
+        It is sampled uniformly from the given range.
+    temperature : (float, float), optional
         When asessing local greedy scores, how much to randomly perturb the
         score. This is implemented as::
 
             score -> sign(score) * log(|score|) - temperature * gumbel()
 
-        which implements boltzmann sampling.
+        which implements boltzmann sampling. It is sampled log-uniformly from
+        the given range.
     seed : int, optional
         The seed for the random number generator.
     simplify : bool, optional

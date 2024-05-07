@@ -435,7 +435,7 @@ impl ContractionProcessor {
             } else {
                 0.0 as f32
             };
-            logsub(sab, log_coeff_a + logadd(sa, sb)) - gumbel
+            logsub(sab - log_coeff_a, logadd(sa, sb) + log_coeff_a) - gumbel
         };
 
         // cache all current nodes sizes as we go
@@ -945,14 +945,16 @@ fn optimize_random_greedy_track_flops(
     output: Vec<char>,
     size_dict: Dict<char, f32>,
     ntrials: usize,
-    costmod: Option<f32>,
-    temperature: Option<f32>,
+    costmod: Option<(f32, f32)>,
+    temperature: Option<(f32, f32)>,
     seed: Option<u64>,
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> (Vec<Vec<Node>>, Score) {
     py.allow_threads(|| {
-        let temperature = temperature.unwrap_or(0.01);
+        let (costmodmin, costmodmax) = costmod.unwrap_or((0.1, 4.0));
+        let (tempmin, tempmax) = temperature.unwrap_or((0.001, 1.0));
+
         let mut rng = match seed {
             Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
             None => rand::rngs::StdRng::from_entropy(),
@@ -969,10 +971,26 @@ fn optimize_random_greedy_track_flops(
         let mut best_path = None;
         let mut best_flops = f32::INFINITY;
 
+        let logtempmin = f32::ln(tempmin);
+        let logtempmax = f32::ln(tempmax);
+
         for seed in seeds {
             let mut cp = cp0.clone();
+
+            // uniform sample for costmod
+            let costmod = match costmodmax - costmodmin {
+                0.0 => costmodmin,
+                diff => costmodmin + rng.gen::<f32>() * diff,
+            };
+
+            // log-uniform sample for temperature
+            let temperature = match logtempmax - logtempmin {
+                0.0 => tempmin,
+                diff => f32::exp(logtempmin + rng.gen::<f32>() * diff),
+            };
+
             // greedily contract each connected subgraph
-            cp.optimize_greedy(costmod, Some(temperature), Some(seed));
+            cp.optimize_greedy(Some(costmod), Some(temperature), Some(seed));
             // optimize any remaining disconnected terms
             cp.optimize_remaining_by_size();
 
