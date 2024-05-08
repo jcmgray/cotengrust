@@ -34,6 +34,7 @@ struct ContractionProcessor {
     ssa_path: SSAPath,
     track_flops: bool,
     flops: Score,
+    flops_limit: Score,
 }
 
 /// given log(x) and log(y) compute log(x + y), without exponentiating both
@@ -195,6 +196,7 @@ impl ContractionProcessor {
         let ssa = nodes.len() as Node;
         let ssa_path: SSAPath = Vec::with_capacity(2 * ssa as usize - 1);
         let flops: Score = 0.0;
+        let flops_limit: Score = Score::INFINITY;
 
         ContractionProcessor {
             nodes,
@@ -205,6 +207,7 @@ impl ContractionProcessor {
             ssa_path,
             track_flops,
             flops,
+            flops_limit,
         }
     }
 
@@ -415,7 +418,7 @@ impl ContractionProcessor {
         costmod: Option<f32>,
         temperature: Option<f32>,
         seed: Option<u64>,
-    ) {
+    ) -> bool {
         let coeff_t = temperature.unwrap_or(0.0);
         let log_coeff_a = f32::ln(costmod.unwrap_or(1.0));
 
@@ -483,6 +486,12 @@ impl ContractionProcessor {
 
             // perform contraction:
             let k = self.contract_nodes_given_legs(i, j, klegs.clone());
+
+            if self.track_flops && self.flops >= self.flops_limit {
+                // stop if we have reached the flops limit
+                return false;
+            }
+
             node_sizes.insert(k, ksize);
 
             for l in self.neighbors(k) {
@@ -498,6 +507,8 @@ impl ContractionProcessor {
                 c -= 1;
             }
         }
+        // success
+        return true;
     }
 
     /// Optimize the contraction order of all terms using a greedy algorithm
@@ -990,13 +1001,19 @@ fn optimize_random_greedy_track_flops(
             };
 
             // greedily contract each connected subgraph
-            cp.optimize_greedy(Some(costmod), Some(temperature), Some(seed));
+            let success = cp.optimize_greedy(Some(costmod), Some(temperature), Some(seed));
+
+            if !success {
+                continue;
+            }
+
             // optimize any remaining disconnected terms
             cp.optimize_remaining_by_size();
 
             if cp.flops < best_flops {
-                best_flops = cp.flops;
                 best_path = Some(cp.ssa_path);
+                best_flops = cp.flops;
+                cp0.flops_limit = cp.flops;
             }
         }
 
