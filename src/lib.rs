@@ -865,6 +865,7 @@ impl ContractionProcessor {
 // --------------------------- PYTHON FUNCTIONS ---------------------------- //
 
 #[pyfunction]
+#[pyo3(signature = (ssa_path, n=None))]
 fn ssa_to_linear(ssa_path: SSAPath, n: Option<usize>) -> SSAPath {
     let n = match n {
         Some(n) => n,
@@ -902,6 +903,7 @@ fn find_subgraphs(
 }
 
 #[pyfunction]
+#[pyo3(signature = (inputs, output, size_dict, use_ssa=None))]
 fn optimize_simplify(
     inputs: Vec<Vec<char>>,
     output: Vec<char>,
@@ -919,6 +921,7 @@ fn optimize_simplify(
 }
 
 #[pyfunction]
+#[pyo3(signature = (inputs, output, size_dict, costmod=None, temperature=None, seed=None, simplify=None, use_ssa=None))]
 fn optimize_greedy(
     py: Python,
     inputs: Vec<Vec<char>>,
@@ -950,6 +953,7 @@ fn optimize_greedy(
 }
 
 #[pyfunction]
+#[pyo3(signature = (inputs, output, size_dict, ntrials, costmod=None, temperature=None, seed=None, simplify=None, use_ssa=None))]
 fn optimize_random_greedy_track_flops(
     py: Python,
     inputs: Vec<Vec<char>>,
@@ -1035,6 +1039,7 @@ fn optimize_random_greedy_track_flops(
 }
 
 #[pyfunction]
+#[pyo3(signature = (inputs, output, size_dict, minimize=None, cost_cap=None, search_outer=None, simplify=None, use_ssa=None))]
 fn optimize_optimal(
     py: Python,
     inputs: Vec<Vec<char>>,
