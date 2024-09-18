@@ -24,54 +24,53 @@ def optimize_greedy(
     use_ssa: typing.Optional[bool] = None,
 ) -> list[list[int]]:
     r"""
-
     Find a contraction path using a (randomizable) greedy algorithm.
 
-        Parameters
-        ----------
-        inputs : Sequence[Sequence[str]]
-            The indices of each input tensor.
-        output : Sequence[str]
-            The indices of the output tensor.
-        size_dict : dict[str, int]
-            A dictionary mapping indices to their dimension.
-        costmod : float, optional
-            When assessing local greedy scores how much to weight the size of the
-            tensors removed compared to the size of the tensor added::
+    Parameters
+    ----------
+    inputs : Sequence[Sequence[str]]
+        The indices of each input tensor.
+    output : Sequence[str]
+        The indices of the output tensor.
+    size_dict : dict[str, int]
+        A dictionary mapping indices to their dimension.
+    costmod : float, optional
+        When assessing local greedy scores how much to weight the size of the
+        tensors removed compared to the size of the tensor added::
 
-                score = size_ab / costmod - (size_a + size_b) * costmod
+            score = size_ab / costmod - (size_a + size_b) * costmod
 
-            This can be a useful hyper-parameter to tune.
-        temperature : float, optional
-            When asessing local greedy scores, how much to randomly perturb the
-            score. This is implemented as::
+        This can be a useful hyper-parameter to tune.
+    temperature : float, optional
+        When asessing local greedy scores, how much to randomly perturb the
+        score. This is implemented as::
 
-                score -> sign(score) * log(|score|) - temperature * gumbel()
+            score -> sign(score) * log(|score|) - temperature * gumbel()
 
-            which implements boltzmann sampling.
-        simplify : bool, optional
-            Whether to perform simplifications before optimizing. These are:
+        which implements boltzmann sampling.
+    simplify : bool, optional
+        Whether to perform simplifications before optimizing. These are:
 
-                - ignore any indices that appear in all terms
-                - combine any repeated indices within a single term
-                - reduce any non-output indices that only appear on a single term
-                - combine any scalar terms
-                - combine any tensors with matching indices (hadamard products)
+            - ignore any indices that appear in all terms
+            - combine any repeated indices within a single term
+            - reduce any non-output indices that only appear on a single term
+            - combine any scalar terms
+            - combine any tensors with matching indices (hadamard products)
 
-            Such simpifications may be required in the general case for the proper
-            functioning of the core optimization, but may be skipped if the input
-            indices are already in a simplified form.
-        use_ssa : bool, optional
-            Whether to return the contraction path in 'single static assignment'
-            (SSA) format (i.e. as if each intermediate is appended to the list of
-            inputs, without removals). This can be quicker and easier to work with
-            than the 'linear recycled' format that `numpy` and `opt_einsum` use.
+        Such simpifications may be required in the general case for the proper
+        functioning of the core optimization, but may be skipped if the input
+        indices are already in a simplified form.
+    use_ssa : bool, optional
+        Whether to return the contraction path in 'single static assignment'
+        (SSA) format (i.e. as if each intermediate is appended to the list of
+        inputs, without removals). This can be quicker and easier to work with
+        than the 'linear recycled' format that `numpy` and `opt_einsum` use.
 
-        Returns
-        -------
-        path : list[list[int]]
-            The contraction path, given as a sequence of pairs of node indices. It
-            may also have single term contractions if `simplify=True`.
+    Returns
+    -------
+    path : list[list[int]]
+        The contraction path, given as a sequence of pairs of node indices. It
+        may also have single term contractions if `simplify=True`.
     """
     ...
 
@@ -226,29 +225,27 @@ def optimize_simplify(
     use_ssa: typing.Optional[bool] = None,
 ) -> list[list[int]]:
     r"""
-
     Find the (partial) contracton path for simplifiactions only.
 
-        Parameters
-        ----------
-        inputs : Sequence[Sequence[str]]
-            The indices of each input tensor.
-        output : Sequence[str]
-            The indices of the output tensor.
-        size_dict : dict[str, int]
-            A dictionary mapping indices to their dimension.
-        use_ssa : bool, optional
-            Whether to return the contraction path in 'single static assignment'
-            (SSA) format (i.e. as if each intermediate is appended to the list of
-            inputs, without removals). This can be quicker and easier to work with
-            than the 'linear recycled' format that `numpy` and `opt_einsum` use.
+    Parameters
+    ----------
+    inputs : Sequence[Sequence[str]]
+        The indices of each input tensor.
+    output : Sequence[str]
+        The indices of the output tensor.
+    size_dict : dict[str, int]
+        A dictionary mapping indices to their dimension.
+    use_ssa : bool, optional
+        Whether to return the contraction path in 'single static assignment'
+        (SSA) format (i.e. as if each intermediate is appended to the list of
+        inputs, without removals). This can be quicker and easier to work with
+        than the 'linear recycled' format that `numpy` and `opt_einsum` use.
 
-        Returns
-        -------
-        path : list[list[int]]
-            The contraction path, given as a sequence of pairs of node indices. It
-            may also have single term contractions.
-
+    Returns
+    -------
+    path : list[list[int]]
+        The contraction path, given as a sequence of pairs of node indices. It
+        may also have single term contractions.
     """
     ...
 
