@@ -10,3 +10,9 @@ updates:
     directory: "/"  # Location of your workflows, typically the root folder
     schedule:
       interval: "daily"  # Frequency of update checks (daily, weekly, or monthly)
+
+  # Enable Dependabot for Rust dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"  # Location of your Cargo.toml file, typically the root folder
+    schedule:
+      interval: "weekly"  # Frequency of update checks (daily, weekly, or monthly)
