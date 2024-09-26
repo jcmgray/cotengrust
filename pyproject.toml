@@ -1,6 +1,6 @@
 [project]
 name = "cotengrust"
-version = "0.1.3"
+version = "0.1.4"
 description = "Fast contraction ordering primitives for tensor networks."
 readme = "README.md"
 requires-python = ">=3.8"
