@@ -96,6 +96,8 @@ def optimize_optimal(
           (also known as contraction cost)
         - "size": minimize with respect to maximum intermediate size only
           (also known as contraction width)
+        - 'max': minimize the single most expensive contraction, i.e. the
+          asymptotic (in index size) scaling of the contraction
         - 'write' : minimize the sum of all tensor sizes, i.e. memory written
         - 'combo' or 'combo={factor}` : minimize the sum of
           FLOPS + factor * WRITE, with a default factor of 64.
@@ -117,11 +119,11 @@ def optimize_optimal(
     simplify : bool, optional
         Whether to perform simplifications before optimizing. These are:
 
-            - ignore any indices that appear in all terms
-            - combine any repeated indices within a single term
-            - reduce any non-output indices that only appear on a single term
-            - combine any scalar terms
-            - combine any tensors with matching indices (hadamard products)
+        - ignore any indices that appear in all terms
+        - combine any repeated indices within a single term
+        - reduce any non-output indices that only appear on a single term
+        - combine any scalar terms
+        - combine any tensors with matching indices (hadamard products)
 
         Such simpifications may be required in the general case for the proper
         functioning of the core optimization, but may be skipped if the input
@@ -177,11 +179,11 @@ def optimize_greedy(
     simplify : bool, optional
         Whether to perform simplifications before optimizing. These are:
 
-            - ignore any indices that appear in all terms
-            - combine any repeated indices within a single term
-            - reduce any non-output indices that only appear on a single term
-            - combine any scalar terms
-            - combine any tensors with matching indices (hadamard products)
+        - ignore any indices that appear in all terms
+        - combine any repeated indices within a single term
+        - reduce any non-output indices that only appear on a single term
+        - combine any scalar terms
+        - combine any tensors with matching indices (hadamard products)
 
         Such simpifications may be required in the general case for the proper
         functioning of the core optimization, but may be skipped if the input
@@ -226,7 +228,6 @@ def optimize_simplify(
     path : list[list[int]]
         The contraction path, given as a sequence of pairs of node indices. It
         may also have single term contractions.
-
     """
     ...
 
@@ -275,11 +276,11 @@ def optimize_random_greedy_track_flops(
     simplify : bool, optional
         Whether to perform simplifications before optimizing. These are:
 
-            - ignore any indices that appear in all terms
-            - combine any repeated indices within a single term
-            - reduce any non-output indices that only appear on a single term
-            - combine any scalar terms
-            - combine any tensors with matching indices (hadamard products)
+        - ignore any indices that appear in all terms
+        - combine any repeated indices within a single term
+        - reduce any non-output indices that only appear on a single term
+        - combine any scalar terms
+        - combine any tensors with matching indices (hadamard products)
 
         Such simpifications may be required in the general case for the proper
         functioning of the core optimization, but may be skipped if the input
