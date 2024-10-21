@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bit-set = "0.8"
-ordered-float = "4.2"
+ordered-float = "4.4"
 pyo3 = "0.22"
 rand = "0.8"
 rustc-hash = "2.0"
