@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 bit-set = "0.8"
 ordered-float = "4.6"
-pyo3 = "0.22"
+pyo3 = "0.23"
 rand = "0.8"
 rustc-hash = "2.1"
 
