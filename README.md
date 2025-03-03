@@ -70,28 +70,28 @@ The following benchmarks illustrate performance and may be a useful comparison p
 
 ---
 
-First, the runtime of the optimal algorithm on random 3-regular graphs, 
+First, the runtime of the optimal algorithm on random 3-regular graphs,
 with all bond sizes set to 2, for different `mimimize` targets:
 
 <img src="https://github.com/user-attachments/assets/e1b906a8-e234-4558-b183-7141c41beb24" width="400">
 
 Taken over 20 instances, lines show mean and bands show standard error on mean. Note how much easier it is
 to find optimal paths for the *maximum* intermediate size or cost only (vs. *total* for all contractions).
-While the runtime generally scales exponentially, for some specific geometries it might reduce to 
+While the runtime generally scales exponentially, for some specific geometries it might reduce to
 polynomial.
 
 ---
 
 For very large graphs, the `random_greedy` optimizer is appropriate, and there is a tradeoff between how
-long one lets it run (`ntrials`) and the best cost it achieves. Here we plot these for various 
-$N=L\times L$ square grid graphs, with all bond sizes set to 2, for different `ntrials` 
+long one lets it run (`ntrials`) and the best cost it achieves. Here we plot these for various
+$N=L\times L$ square grid graphs, with all bond sizes set to 2, for different `ntrials`
 (labelled on each marker):
 
 <img src="https://github.com/user-attachments/assets/e319b5cf-25ea-4273-aa0f-4f3acb3beaa6" width="400">
 
 Again, data is taken over 20 runs, with lines and bands showing mean and standard error on the mean.
 In most cases 32-64 trials is sufficient to achieve close to convergence, but for larger or harder
-graphs you may need more. The empirical scaling of the random-greedy algorithm is very roughly 
+graphs you may need more. The empirical scaling of the random-greedy algorithm is very roughly
 $\mathcal{O}(N^{1.5})$ here.
 
 ---

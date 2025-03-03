@@ -425,7 +425,7 @@ impl ContractionProcessor {
         let mut rng = if coeff_t != 0.0 {
             Some(match seed {
                 Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
-                None => rand::rngs::StdRng::from_entropy(),
+                None => rand::rngs::StdRng::from_os_rng(),
             })
         } else {
             // zero temp - no need for rng
@@ -434,7 +434,7 @@ impl ContractionProcessor {
 
         let mut local_score = |sa: Score, sb: Score, sab: Score| -> Score {
             let gumbel = if let Some(rng) = &mut rng {
-                coeff_t * -f32::ln(-f32::ln(rng.gen()))
+                coeff_t * -f32::ln(-f32::ln(rng.random()))
             } else {
                 0.0 as f32
             };
@@ -1130,9 +1130,9 @@ fn optimize_random_greedy_track_flops(
 
         let mut rng = match seed {
             Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
-            None => rand::rngs::StdRng::from_entropy(),
+            None => rand::rngs::StdRng::from_os_rng(),
         };
-        let seeds = (0..ntrials).map(|_| rng.gen()).collect::<Vec<u64>>();
+        let seeds = (0..ntrials).map(|_| rng.random()).collect::<Vec<u64>>();
 
         let n: usize = inputs.len();
         // construct processor and perform simplifications once
@@ -1151,14 +1151,14 @@ fn optimize_random_greedy_track_flops(
             let costmod = if is_const_costmod {
                 costmod_min
             } else {
-                costmod_min + rng.gen::<f32>() * costmod_diff
+                costmod_min + rng.random::<f32>() * costmod_diff
             };
 
             // log-uniform sample for temperature
             let temperature = if is_const_temp {
                 temp_min
             } else {
-                f32::exp(log_temp_min + rng.gen::<f32>() * log_temp_diff)
+                f32::exp(log_temp_min + rng.random::<f32>() * log_temp_diff)
             };
 
             // greedily contract each connected subgraph
