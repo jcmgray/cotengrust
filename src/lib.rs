@@ -1027,7 +1027,7 @@ fn optimize_greedy(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> Vec<Vec<Node>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let n = inputs.len();
         let mut cp = ContractionProcessor::new(inputs, output, size_dict, false);
         if simplify.unwrap_or(true) {
@@ -1117,7 +1117,7 @@ fn optimize_random_greedy_track_flops(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> (Vec<Vec<Node>>, Score) {
-    py.allow_threads(|| {
+    py.detach(|| {
         let (costmod_min, costmod_max) = costmod.unwrap_or((0.1, 4.0));
         let costmod_diff = (costmod_max - costmod_min).abs();
         let is_const_costmod = costmod_diff < Score::EPSILON;
@@ -1262,7 +1262,7 @@ fn optimize_optimal(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> Vec<Vec<Node>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let n = inputs.len();
         let mut cp = ContractionProcessor::new(inputs, output, size_dict, false);
         if simplify.unwrap_or(true) {
