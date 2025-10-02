@@ -245,6 +245,24 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
         js
     }
 
+    /// like neighbors but skip edges with too many neighbors, for greedy
+    fn neighbors_limit(&self, i: Node, max_neighbors: usize) -> BTreeSet<Node> {
+        let mut js = BTreeSet::default();
+        for (ix, _) in self.nodes[&i].iter() {
+            if max_neighbors != 0 && self.edges[&ix].len() > max_neighbors {
+                // basically a batch index with too many combinations -> skip
+                continue;
+            }
+
+            self.edges[&ix].iter().for_each(|&j| {
+                if j != i {
+                    js.insert(j);
+                };
+            });
+        }
+        js
+    }
+
     /// remove an index from the graph, updating all legs
     fn remove_ix(&mut self, ix: Ix) {
         for j in self.edges.remove(&ix).unwrap() {
@@ -439,10 +457,12 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
         &mut self,
         costmod: Option<f32>,
         temperature: Option<f32>,
+        max_neighbors: Option<usize>,
         seed: Option<u64>,
     ) -> bool {
         let coeff_t = temperature.unwrap_or(0.0);
         let log_coeff_a = f32::ln(costmod.unwrap_or(1.0));
+        let max_neighbors = max_neighbors.unwrap_or(16);
 
         let mut rng = if coeff_t != 0.0 {
             Some(match seed {
@@ -479,6 +499,11 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
 
         // get the initial candidate contractions
         for ix_nodes in self.edges.values() {
+            if max_neighbors != 0 && ix_nodes.len() > max_neighbors {
+                // basically a batch index with too many combinations -> skip
+                continue;
+            }
+
             // convert to vector for combinational indexing
             let ix_nodes: Vec<Node> = ix_nodes.iter().cloned().collect();
             // for all combinations of nodes with a connected edge
@@ -516,7 +541,7 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
 
             node_sizes.insert(k, ksize);
 
-            for l in self.neighbors(k) {
+            for l in self.neighbors_limit(k, max_neighbors) {
                 // assess all neighboring contractions of new node
                 let llegs = &self.nodes[&l];
                 let lsize = node_sizes[&l];
@@ -528,6 +553,22 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
                 contractions.insert(c, (k, l, msize, mlegs));
                 c -= 1;
             }
+
+            // // potential queue pruning?
+            // if queue.len() > 100_000 {
+            //     let mut valid_contractions = Vec::new();
+            //     for (score, cid) in queue.drain() {
+            //         if let Some((i, j, _, _)) = contractions.get(&cid) {
+            //             if self.nodes.contains_key(&i) && self.nodes.contains_key(&j) {
+            //                 valid_contractions.push((score, cid));
+            //             } else {
+            //                 // Remove stale contraction from map
+            //                 contractions.remove(&cid);
+            //             }
+            //         }
+            //     }
+            //     queue = BinaryHeap::from(valid_contractions);
+            // }
         }
         // success
         return true;
@@ -941,6 +982,7 @@ fn run_greedy<Ix: IndexType, Node: NodeType>(
     size_dict: Dict<char, f32>,
     costmod: Option<f32>,
     temperature: Option<f32>,
+    max_neighbors: Option<usize>,
     seed: Option<u64>,
     simplify: bool,
 ) -> SSAPath {
@@ -949,7 +991,7 @@ fn run_greedy<Ix: IndexType, Node: NodeType>(
     if simplify {
         cp.simplify();
     }
-    cp.optimize_greedy(costmod, temperature, seed);
+    cp.optimize_greedy(costmod, temperature, max_neighbors, seed);
     cp.optimize_remaining_by_size();
     cp.ssa_path
 }
@@ -987,6 +1029,7 @@ fn run_random_greedy_optimization<Ix: IndexType, Node: NodeType>(
     log_temp_min: f32,
     log_temp_diff: f32,
     is_const_temp: bool,
+    max_neighbors: Option<usize>,
     rng: &mut rand::rngs::StdRng,
 ) -> (SSAPath, Score) {
     let mut cp0: ContractionProcessor<Ix, Node> =
@@ -1013,7 +1056,8 @@ fn run_random_greedy_optimization<Ix: IndexType, Node: NodeType>(
             f32::exp(log_temp_min + rng.random::<f32>() * log_temp_diff)
         };
 
-        let success = cp.optimize_greedy(Some(costmod), Some(temperature), Some(*seed));
+        let success =
+            cp.optimize_greedy(Some(costmod), Some(temperature), max_neighbors, Some(*seed));
 
         if !success {
             continue;
@@ -1135,7 +1179,7 @@ fn optimize_simplify(
 }
 
 #[pyfunction]
-#[pyo3(signature = (inputs, output, size_dict, costmod=None, temperature=None, seed=None, simplify=None, use_ssa=None))]
+#[pyo3(signature = (inputs, output, size_dict, costmod=None, temperature=None, max_neighbors=None, seed=None, simplify=None, use_ssa=None))]
 /// Find a contraction path using a (randomizable) greedy algorithm.
 ///
 /// Parameters
@@ -1160,6 +1204,12 @@ fn optimize_simplify(
 ///         score -> sign(score) * log(|score|) - temperature * gumbel()
 ///
 ///     which implements boltzmann sampling.
+/// max_neighbors : int, optional
+///     If non-zero, skip any index that connects to more than this many
+///     nodes. This is useful to avoid combinatorial explosions when
+///     dealing with essentially batch indices. Default: 16.
+/// seed : int, optional
+///     The seed for the random number generator.
 /// simplify : bool, optional
 ///     Whether to perform simplifications before optimizing. These are:
 ///
@@ -1190,6 +1240,7 @@ fn optimize_greedy(
     size_dict: Dict<char, f32>,
     costmod: Option<f32>,
     temperature: Option<f32>,
+    max_neighbors: Option<usize>,
     seed: Option<u64>,
     simplify: Option<bool>,
     use_ssa: Option<bool>,
@@ -1208,6 +1259,7 @@ fn optimize_greedy(
                     size_dict,
                     costmod,
                     temperature,
+                    max_neighbors,
                     seed,
                     simplify,
                 )
@@ -1219,6 +1271,7 @@ fn optimize_greedy(
                     size_dict,
                     costmod,
                     temperature,
+                    max_neighbors,
                     seed,
                     simplify,
                 )
@@ -1229,6 +1282,7 @@ fn optimize_greedy(
                 size_dict,
                 costmod,
                 temperature,
+                max_neighbors,
                 seed,
                 simplify,
             ),
@@ -1243,7 +1297,7 @@ fn optimize_greedy(
 }
 
 #[pyfunction]
-#[pyo3(signature = (inputs, output, size_dict, ntrials, costmod=None, temperature=None, seed=None, simplify=None, use_ssa=None))]
+#[pyo3(signature = (inputs, output, size_dict, ntrials, costmod=None, temperature=None, max_neighbors=None, seed=None, simplify=None, use_ssa=None))]
 /// Perform a batch of random greedy optimizations, simulteneously tracking
 /// the best contraction path in terms of flops, so as to avoid constructing a
 /// separate contraction tree.
@@ -1273,6 +1327,10 @@ fn optimize_greedy(
 ///
 ///     which implements boltzmann sampling. It is sampled log-uniformly from
 ///     the given range.
+/// max_neighbors : int, optional
+///    If non-zero, skip any index that connects to more than this many
+///    nodes. This is useful to avoid combinatorial explosions when
+///    dealing with essentially batch indices. Default: 16.
 /// seed : int, optional
 ///     The seed for the random number generator.
 /// simplify : bool, optional
@@ -1309,6 +1367,7 @@ fn optimize_random_greedy_track_flops(
     ntrials: usize,
     costmod: Option<(f32, f32)>,
     temperature: Option<(f32, f32)>,
+    max_neighbors: Option<usize>,
     seed: Option<u64>,
     simplify: Option<bool>,
     use_ssa: Option<bool>,
@@ -1350,6 +1409,7 @@ fn optimize_random_greedy_track_flops(
                     log_temp_min,
                     log_temp_diff,
                     is_const_temp,
+                    max_neighbors,
                     &mut rng,
                 )
             }
@@ -1367,6 +1427,7 @@ fn optimize_random_greedy_track_flops(
                     log_temp_min,
                     log_temp_diff,
                     is_const_temp,
+                    max_neighbors,
                     &mut rng,
                 )
             }
@@ -1383,6 +1444,7 @@ fn optimize_random_greedy_track_flops(
                 log_temp_min,
                 log_temp_diff,
                 is_const_temp,
+                max_neighbors,
                 &mut rng,
             ),
         };
