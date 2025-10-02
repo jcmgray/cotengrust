@@ -12,7 +12,7 @@ use std::hash::Hash;
 use FxHashMap as Dict;
 
 // n.b. this constrains the maximum number index appearances < 256
-type Count = u8;
+type Count = u16;
 type Score = f32;
 type GreedyScore = OrderedFloat<Score>;
 type SSAPath = Vec<Vec<u32>>;
