@@ -16,16 +16,86 @@ requires_cotengra = pytest.mark.skipif(ctg_missing, reason="requires cotengra")
 
 @pytest.mark.parametrize("which", ["greedy", "optimal"])
 def test_basic_call(which):
-    inputs = [('a', 'b'), ('b', 'c'), ('c', 'd'), ('d', 'a')]
-    output = ('b', 'd')
-    size_dict = {'a': 2, 'b': 3, 'c': 4, 'd': 5}
+    inputs = [("a", "b"), ("b", "c"), ("c", "d"), ("d", "a")]
+    output = ("b", "d")
+    size_dict = {"a": 2, "b": 3, "c": 4, "d": 5}
     path = {
         "greedy": ctgr.optimize_greedy,
         "optimal": ctgr.optimize_optimal,
-    }[
-        which
-    ](inputs, output, size_dict)
+    }[which](inputs, output, size_dict)
     assert all(len(con) <= 2 for con in path)
+
+
+@pytest.mark.parametrize(
+    "which",
+    ["simplify", "greedy", "optimal", "random_greedy"],
+)
+def test_single_input(which):
+    inputs = [("a", "b")]
+    output = ("a", "b")
+    size_dict = {"a": 2, "b": 3}
+    if which == "random_greedy":
+        path, flops = ctgr.optimize_random_greedy_track_flops(
+            inputs, output, size_dict, ntrials=1
+        )
+        assert flops == 0.0
+    else:
+        path = {
+            "simplify": ctgr.optimize_simplify,
+            "greedy": ctgr.optimize_greedy,
+            "optimal": ctgr.optimize_optimal,
+        }[which](inputs, output, size_dict)
+    assert path == [[0]]
+
+
+@pytest.mark.parametrize("which", ["greedy", "optimal", "random_greedy"])
+def test_two_inputs(which):
+    inputs = [("a", "b"), ("b", "c")]
+    output = ("a", "c")
+    size_dict = {"a": 2, "b": 3, "c": 4}
+    if which == "random_greedy":
+        path, flops = ctgr.optimize_random_greedy_track_flops(
+            inputs, output, size_dict, ntrials=1
+        )
+    else:
+        path = {
+            "greedy": ctgr.optimize_greedy,
+            "optimal": ctgr.optimize_optimal,
+        }[which](inputs, output, size_dict)
+    assert path == [[0, 1]]
+
+
+@pytest.mark.parametrize(
+    "which",
+    ["simplify", "greedy", "optimal", "random_greedy"],
+)
+def test_two_inputs_with_simplification(which):
+    """Two inputs where each term has indices needing simplification first.
+
+    For 'ab,cd->', both terms have non-output, single-term indices that
+    should be reduced before the final contraction, producing a path like
+    [(0,), (1,), (0, 1)] rather than just [(0, 1)].
+    """
+    inputs = [("a", "b"), ("c", "d")]
+    output = ()
+    size_dict = {"a": 2, "b": 3, "c": 4, "d": 5}
+    if which == "random_greedy":
+        path, _ = ctgr.optimize_random_greedy_track_flops(
+            inputs, output, size_dict, ntrials=1
+        )
+    else:
+        path = {
+            "simplify": ctgr.optimize_simplify,
+            "greedy": ctgr.optimize_greedy,
+            "optimal": ctgr.optimize_optimal,
+        }[which](inputs, output, size_dict)
+    # simplification should reduce each term independently first,
+    # producing two single-term contractions before the final pair
+    assert len(path) == 3
+    singles = [con for con in path if len(con) == 1]
+    pairs = [con for con in path if len(con) == 2]
+    assert len(singles) == 2
+    assert len(pairs) == 1
 
 
 def find_output_str(lhs):
@@ -157,9 +227,7 @@ def test_manual_cases(eq, which):
     path = {
         "greedy": ctgr.optimize_greedy,
         "optimal": ctgr.optimize_optimal,
-    }[
-        which
-    ](inputs, output, size_dict)
+    }[which](inputs, output, size_dict)
     assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(
         inputs, output, size_dict, path=path, check=True
@@ -184,9 +252,7 @@ def test_basic_rand(seed, which):
     path = {
         "greedy": ctgr.optimize_greedy,
         "optimal": ctgr.optimize_optimal,
-    }[
-        which
-    ](inputs, output, size_dict)
+    }[which](inputs, output, size_dict)
     assert all(len(con) <= 2 for con in path)
     tree = ctg.ContractionTree.from_path(
         inputs, output, size_dict, path=path, check=True
@@ -196,22 +262,16 @@ def test_basic_rand(seed, which):
 
 @requires_cotengra
 def test_optimal_lattice_eq():
-    inputs, output, _, size_dict = ctg.utils.lattice_equation(
-        [4, 5], d_max=2, seed=42
-    )
+    inputs, output, _, size_dict = ctg.utils.lattice_equation([4, 5], d_max=2, seed=42)
 
-    path = ctgr.optimize_optimal(inputs, output, size_dict, minimize='flops')
-    tree = ctg.ContractionTree.from_path(
-        inputs, output, size_dict, path=path
-    )
+    path = ctgr.optimize_optimal(inputs, output, size_dict, minimize="flops")
+    tree = ctg.ContractionTree.from_path(inputs, output, size_dict, path=path)
     assert tree.is_complete()
     assert tree.contraction_cost() == 964
 
-    path = ctgr.optimize_optimal(inputs, output, size_dict, minimize='size')
+    path = ctgr.optimize_optimal(inputs, output, size_dict, minimize="size")
     assert all(len(con) <= 2 for con in path)
-    tree = ctg.ContractionTree.from_path(
-        inputs, output, size_dict, path=path
-    )
+    tree = ctg.ContractionTree.from_path(inputs, output, size_dict, path=path)
     assert tree.contraction_width() == pytest.approx(5)
 
 
@@ -228,8 +288,6 @@ def test_optimize_random_greedy_log_flops():
         inputs, output, size_dict, ntrials=4, seed=42
     )
     assert cost1 == cost2
-    tree = ctg.ContractionTree.from_path(
-        inputs, output, size_dict, path=path
-    )
+    tree = ctg.ContractionTree.from_path(inputs, output, size_dict, path=path)
     assert tree.is_complete()
     assert tree.contraction_cost(log=10) == pytest.approx(cost1)

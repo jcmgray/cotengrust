@@ -991,7 +991,9 @@ fn run_greedy<Ix: IndexType, Node: NodeType>(
     if simplify {
         cp.simplify();
     }
-    cp.optimize_greedy(costmod, temperature, max_neighbors, seed);
+    if cp.nodes.len() > 2 {
+        cp.optimize_greedy(costmod, temperature, max_neighbors, seed);
+    }
     cp.optimize_remaining_by_size();
     cp.ssa_path
 }
@@ -1010,7 +1012,9 @@ fn run_optimal<Ix: IndexType, Node: NodeType>(
     if simplify {
         cp.simplify();
     }
-    cp.optimize_optimal(minimize, cost_cap, search_outer);
+    if cp.nodes.len() > 2 {
+        cp.optimize_optimal(minimize, cost_cap, search_outer);
+    }
     cp.optimize_remaining_by_size();
     cp.ssa_path
 }
@@ -1036,6 +1040,12 @@ fn run_random_greedy_optimization<Ix: IndexType, Node: NodeType>(
         ContractionProcessor::new(inputs, output, size_dict, true);
     if simplify {
         cp0.simplify();
+    }
+
+    if cp0.nodes.len() <= 2 {
+        cp0.optimize_remaining_by_size();
+        let flops = cp0.flops * f32::consts::LOG10_E;
+        return (cp0.ssa_path, flops);
     }
 
     let mut best_path: Option<SSAPath> = None;
@@ -1158,6 +1168,9 @@ fn optimize_simplify(
     use_ssa: Option<bool>,
 ) -> SSAPath {
     let n = inputs.len();
+    if n <= 1 {
+        return vec![(0..n as u32).collect()];
+    }
     let num_indices = size_dict.len();
     let max_nodes = 2 * n;
 
@@ -1245,8 +1258,11 @@ fn optimize_greedy(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> SSAPath {
+    let n = inputs.len();
+    if n <= 1 {
+        return vec![(0..n as u32).collect()];
+    }
     py.detach(|| {
-        let n = inputs.len();
         let num_indices = size_dict.len();
         let max_nodes = 2 * n;
         let simplify = simplify.unwrap_or(true);
@@ -1372,6 +1388,10 @@ fn optimize_random_greedy_track_flops(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> (SSAPath, Score) {
+    let n = inputs.len();
+    if n <= 1 {
+        return (vec![(0..n as u32).collect()], 0.0);
+    }
     py.detach(|| {
         let (costmod_min, costmod_max) = costmod.unwrap_or((0.1, 4.0));
         let costmod_diff = (costmod_max - costmod_min).abs();
@@ -1389,7 +1409,6 @@ fn optimize_random_greedy_track_flops(
         };
         let seeds = (0..ntrials).map(|_| rng.random()).collect::<Vec<u64>>();
 
-        let n: usize = inputs.len();
         let num_indices = size_dict.len();
         let max_nodes = 2 * n;
 
@@ -1530,8 +1549,11 @@ fn optimize_optimal(
     simplify: Option<bool>,
     use_ssa: Option<bool>,
 ) -> SSAPath {
+    let n = inputs.len();
+    if n <= 1 {
+        return vec![(0..n as u32).collect()];
+    }
     py.detach(|| {
-        let n = inputs.len();
         let num_indices = size_dict.len();
         let max_nodes = 2 * n;
         let simplify = simplify.unwrap_or(true);
