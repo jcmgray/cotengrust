@@ -70,3 +70,7 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+# pixi environments
+.pixi/*
+!.pixi/config.toml
