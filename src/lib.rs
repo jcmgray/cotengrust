@@ -1168,9 +1168,6 @@ fn optimize_simplify(
     use_ssa: Option<bool>,
 ) -> SSAPath {
     let n = inputs.len();
-    if n <= 1 {
-        return vec![(0..n as u32).collect()];
-    }
     let num_indices = size_dict.len();
     let max_nodes = 2 * n;
 

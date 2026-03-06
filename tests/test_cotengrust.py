@@ -39,13 +39,16 @@ def test_single_input(which):
             inputs, output, size_dict, ntrials=1
         )
         assert flops == 0.0
+        assert path == [[0]]
+    elif which == "simplify":
+        path = ctgr.optimize_simplify(inputs, output, size_dict)
+        assert path == []
     else:
         path = {
-            "simplify": ctgr.optimize_simplify,
             "greedy": ctgr.optimize_greedy,
             "optimal": ctgr.optimize_optimal,
         }[which](inputs, output, size_dict)
-    assert path == [[0]]
+        assert path == [[0]]
 
 
 @pytest.mark.parametrize("which", ["greedy", "optimal", "random_greedy"])
