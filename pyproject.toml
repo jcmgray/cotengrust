@@ -1,6 +1,5 @@
 [project]
 name = "cotengrust"
-version = "0.2.1"
 description = "Fast contraction ordering primitives for tensor networks."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -13,6 +12,7 @@ license = { file = "LICENSE" }
 authors = [
     {name = "Johnnie Gray", email = "johnniemcgray@gmail.com"}
 ]
+dynamic = ["version"]
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]

@@ -504,7 +504,7 @@ packages:
 - pypi: ./
   name: cotengrust
   version: 0.2.1
-  sha256: 4c0a7573b568efdd484f9cf4a0d1126d87d076cd86663aa6a0802b7647170e24
+  sha256: fa3eeb3403e4954a1c89d24199ab39da73412c94c67a899b4b06305c40230c12
   requires_python: '>=3.8'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/cytoolz-1.1.0-py314h5bd0f2a_2.conda
   sha256: 5edb3c0fbf5c39b66f71fef0264d4fbab561f6adbdd7ef88188b725a82fcd6da
@@ -2047,7 +2047,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/sqlalchemy?source=compressed-mapping
+  - pkg:pypi/sqlalchemy?source=hash-mapping
   size: 4018040
   timestamp: 1772645059586
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/sqlalchemy-2.0.48-py314ha14b1ff_0.conda
