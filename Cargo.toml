@@ -9,7 +9,7 @@ name = "cotengrust"
 crate-type = ["cdylib"]
 
 [dependencies]
-bit-set = "0.8"
+bit-set = "0.9"
 num-traits = "0.2"
 ordered-float = "5.1"
 pyo3 = "0.28"
