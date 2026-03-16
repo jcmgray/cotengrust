@@ -30,6 +30,7 @@ cotengrust = { path = ".", editable = true }
 
 [tool.pixi.feature.testing.dependencies]
 cotengra = "*"
+networkx = "*"
 pytest = "*"
 
 [tool.pixi.environments]

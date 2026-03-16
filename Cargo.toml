@@ -9,11 +9,11 @@ name = "cotengrust"
 crate-type = ["cdylib"]
 
 [dependencies]
-bit-set = "0.8"
+bit-set = "0.9"
+fastrand = "2.3"
 num-traits = "0.2"
 ordered-float = "5.1"
 pyo3 = "0.28"
-rand = "0.9"
 rustc-hash = "2.1"
 
 [profile.release]

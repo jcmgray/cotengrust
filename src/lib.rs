@@ -1,9 +1,8 @@
 use bit_set::BitSet;
+use fastrand::Rng;
 use num_traits::{AsPrimitive, Bounded, PrimInt};
 use ordered_float::OrderedFloat;
 use pyo3::prelude::*;
-use rand::Rng;
-use rand::SeedableRng;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeSet, BinaryHeap, HashSet};
 use std::f32;
@@ -466,8 +465,8 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
 
         let mut rng = if coeff_t != 0.0 {
             Some(match seed {
-                Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
-                None => rand::rngs::StdRng::from_os_rng(),
+                Some(seed) => Rng::with_seed(seed),
+                None => Rng::new(),
             })
         } else {
             // zero temp - no need for rng
@@ -476,7 +475,7 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
 
         let mut local_score = |sa: Score, sb: Score, sab: Score| -> Score {
             let gumbel = if let Some(rng) = &mut rng {
-                coeff_t * -f32::ln(-f32::ln(rng.random()))
+                coeff_t * -f32::ln(-f32::ln(rng.f32()))
             } else {
                 0.0 as f32
             };
@@ -1034,7 +1033,7 @@ fn run_random_greedy_optimization<Ix: IndexType, Node: NodeType>(
     log_temp_diff: f32,
     is_const_temp: bool,
     max_neighbors: Option<usize>,
-    rng: &mut rand::rngs::StdRng,
+    rng: &mut Rng,
 ) -> (SSAPath, Score) {
     let mut cp0: ContractionProcessor<Ix, Node> =
         ContractionProcessor::new(inputs, output, size_dict, true);
@@ -1057,13 +1056,13 @@ fn run_random_greedy_optimization<Ix: IndexType, Node: NodeType>(
         let costmod = if is_const_costmod {
             costmod_min
         } else {
-            costmod_min + rng.random::<f32>() * costmod_diff
+            costmod_min + rng.f32() * costmod_diff
         };
 
         let temperature = if is_const_temp {
             temp_min
         } else {
-            f32::exp(log_temp_min + rng.random::<f32>() * log_temp_diff)
+            f32::exp(log_temp_min + rng.f32() * log_temp_diff)
         };
 
         let success =
@@ -1401,10 +1400,10 @@ fn optimize_random_greedy_track_flops(
         let is_const_temp = log_temp_diff < Score::EPSILON;
 
         let mut rng = match seed {
-            Some(seed) => rand::rngs::StdRng::seed_from_u64(seed),
-            None => rand::rngs::StdRng::from_os_rng(),
+            Some(seed) => Rng::with_seed(seed),
+            None => Rng::new(),
         };
-        let seeds = (0..ntrials).map(|_| rng.random()).collect::<Vec<u64>>();
+        let seeds = (0..ntrials).map(|_| rng.u64(..)).collect::<Vec<u64>>();
 
         let num_indices = size_dict.len();
         let max_nodes = 2 * n;
