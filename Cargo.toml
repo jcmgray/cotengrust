@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 bit-set = "0.9"
 fastrand = "2.3"
 num-traits = "0.2"
-ordered-float = "5.1"
+ordered-float = "5.3"
 pyo3 = "0.28"
 rustc-hash = "2.1"
 
