@@ -10,7 +10,7 @@ use std::hash::Hash;
 
 use FxHashMap as Dict;
 
-// n.b. this constrains the maximum number index appearances < 256
+// n.b. this constrains the maximum number index appearances < 65536
 type Count = u16;
 type Score = f32;
 type GreedyScore = OrderedFloat<Score>;
@@ -189,13 +189,18 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
         for (i, term) in inputs.into_iter().enumerate() {
             let mut legs = Vec::with_capacity(term.len());
             for ind in term {
+                let d = size_dict[&ind];
+                if d == 1.0 {
+                    // size-1 index contributes nothing to cost -> ignore it
+                    continue;
+                }
                 match indmap.get(&ind) {
                     None => {
                         // index not parsed yet
                         indmap.insert(ind, c);
                         edges.insert(c, std::iter::once(Node::from(i).unwrap()).collect());
                         appearances.push(1);
-                        sizes.push(f32::ln(size_dict[&ind] as f32));
+                        sizes.push(d.ln());
                         legs.push((c, 1));
                         c = c + Ix::one();
                     }
@@ -211,7 +216,10 @@ impl<Ix: IndexType, Node: NodeType> ContractionProcessor<Ix, Node> {
             nodes.insert(Node::from(i).unwrap(), legs);
         }
         output.into_iter().for_each(|ind| {
-            appearances[indmap[&ind].as_()] += 1;
+            // size-1 indices were never registered -> skip them here too
+            if let Some(&ix) = indmap.get(&ind) {
+                appearances[ix.as_()] += 1;
+            }
         });
 
         let ssa = Node::from(nodes.len()).unwrap();
